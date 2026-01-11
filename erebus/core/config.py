@@ -20,7 +20,7 @@ APP_CONFIG = {
     "limits": {
         "max_dns": 20,
         "max_pages": 300,
-        "max_scripts": 300
+        "max_scripts": 15
     },
 
     "timeouts": {

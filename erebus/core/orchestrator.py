@@ -257,7 +257,7 @@ class Orchestrator:
             for r in email_results:
                 email = normalize_email(r["value"])
                 if email:
-                    emails_html.add(email) #Metricas
+                    emails_html.add(email)  # Métricas
 
                     if self._is_new_email(email, seen_emails):
                         self.database.insert_email(
@@ -276,34 +276,55 @@ class Orchestrator:
         if cfg["modules"]["crawler"]:
             print("Buscando emails mediante crawler (live + wayback)...")
 
-            # URLs live
+            live_results = []
+            wayback_results = []
+
+            # -------------------------
+            # LIVE CRAWLER
+            # -------------------------
             live_urls = list(self._build_crawl_urls(execution.TARGET))
 
-            # URLs wayback
-            wayback_urls = set()
-            if cfg["modules"].get("wayback"):
-                print("Recolectando URLs históricas desde Wayback Machine...")
-                wayback_urls = self.wayback_collector.collect(execution.TARGET)
-
-            # Mezclar URLs
-            start_urls = list(dict.fromkeys(live_urls + list(wayback_urls)))
-
-            # Ejecutar crawler UNA SOLA VEZ
-            crawler = self.crawler_cls(
-                start_url=start_urls,
+            crawler_live = self.crawler_cls(
+                start_url=live_urls,
                 max_pages=self.crawler_max_pages,
                 timeout=self.crawler_timeout,
                 allowed_domain=execution.TARGET
             )
 
-            crawl_results = crawler.run()
+            live_results = crawler_live.run()
 
-            # Procesar resultados
-            for page in crawl_results:
+            for page in live_results:
+                page["origin"] = "live"
+
+            # -------------------------
+            # WAYBACK CRAWLER (SOLO HTML)
+            # -------------------------
+            if cfg["modules"].get("wayback"):
+                print("Recolectando URLs históricas desde Wayback Machine...")
+                wayback_urls = self.wayback_collector.collect(execution.TARGET)
+
+                if wayback_urls:
+                    crawler_wb = self.crawler_cls(
+                        start_url=list(wayback_urls),
+                        max_pages=cfg["limits"].get("wayback_pages", 20),
+                        timeout=self.crawler_timeout,
+                        allowed_domain=None
+                    )
+
+                    wayback_results = crawler_wb.run()
+
+                    for page in wayback_results:
+                        page["origin"] = "wayback"
+
+            # -------------------------
+            # PROCESADO HTML UNIFICADO
+            # -------------------------
+            all_crawl_results = live_results + wayback_results
+
+            for page in all_crawl_results:
                 page_url = page["url"]
                 domain = urlparse(page_url).netloc
-
-                is_wayback = "web.archive.org" in domain
+                origin = page["origin"]
 
                 self.database.insert_crawler_result(
                     execution.ID,
@@ -313,14 +334,15 @@ class Orchestrator:
                     page.get("scripts", [])
                 )
 
-                # Emails
+                # Emails HTML
                 for e in page.get("emails", []):
                     email = normalize_email(e)
                     if not email:
                         continue
 
                     emails_crawler.add(email)
-                    if is_wayback:
+
+                    if origin == "wayback":
                         emails_from_wayback.add(email)
                     else:
                         emails_from_live.add(email)
@@ -332,145 +354,167 @@ class Orchestrator:
                             domain,
                             technique=C.TECHNIQUE_CRAWLER_HTML,
                             source=page_url,
-                            context="wayback" if is_wayback else "live"
+                            context=origin
                         )
 
-            # -------------------------------------------------
-            # Parsing JS (Solo en los resultados del crawler. No del wayback. Podría tener js roto)
-            # -------------------------------------------------
+                # Credenciales HTML
+                raw_html = page.get("raw_html", "")
+                creds = self.cred_parser.parse(raw_html, source=C.SOURCE_HTML)
 
-            if  cfg["modules"]["js_parsing"]:
-                print("Parseando JS...")
+                for ctype, value, source in creds:
+                    creds_html.add((ctype, value))
 
-                max_scripts = int(cfg["limits"]["max_scripts"])
+                    if self._is_new_credential(ctype, value, seen_creds):
+                        self.database.insert_credential(
+                            execution.ID,
+                            ctype,
+                            value,
+                            technique=C.TECHNIQUE_CRAWLER_HTML,
+                            source=page_url,
+                            context=origin
+                        )
 
-                if not crawl_results:
-                    print("No hay resultados de crawling, se omite parsing JS")
-                else:
+        # -------------------------------------------------
+        # 6. Parsing JS (SOLO LIVE)
+        # -------------------------------------------------
 
-                    base_domain = urlparse(crawl_urls[0]).netloc
+        if cfg["modules"]["js_parsing"]:
+            print("Parseando JS (solo live)...")
 
-                    for page in crawl_results:
-                        if "@" in page["url"]:
-                            continue  # URL no navegable
+            max_scripts = int(cfg["limits"]["max_scripts"])
+            parsed_scripts = 0
 
-                        for script_url in page.get("scripts", []):
-                            parsed = self.js_parser.parse(script_url, base_domain)
+            base_domain = urlparse(live_urls[0]).netloc
 
-                            if not parsed:
-                                continue
+            for page in live_results:
+                if parsed_scripts >= max_scripts:
+                    break
 
-                            self.database.insert_js_result(
-                                execution.ID,
-                                parsed["script_url"],
-                                parsed.get("emails", []),
-                                parsed.get("urls", [])
-                            )
+                if "@" in page["url"]:
+                    continue
 
-                            # Emails JS
-                            for e in parsed.get("emails", []):
-                                email = normalize_email(e)
-                                if email:
-                                    emails_js.add(email)  #Metricas
+                for script_url in page.get("scripts", []):
+                    if parsed_scripts >= max_scripts:
+                        break
 
-                                    if self._is_new_email(email, seen_emails):
-                                        self.database.insert_email(
-                                            execution.ID,
-                                            email,
-                                            urlparse(script_url).netloc,
-                                            technique=C.TECHNIQUE_JS_STATIC,
-                                            source=script_url,
-                                            context=script_url
-                                        )
-
-                            # Credenciales JS
-                            raw_js = parsed.get("raw", "")
-                            creds = self.cred_parser.parse(raw_js, source=C.SOURCE_JS)
-
-                            for ctype, value, source in creds:
-
-                                creds_js.add((ctype, value))  #Metricas
-
-                                if self._is_new_credential(ctype, value, seen_creds):
-                                    self.database.insert_credential(
-                                        execution.ID,
-                                        ctype,
-                                        value,
-                                        technique=C.TECHNIQUE_JS_STATIC,
-                                        source=script_url,
-                                        context=script_url
-                                    )
-
-
-            # -------------------------------------------------
-            # Scraping activo
-            # -------------------------------------------------
-            if cfg["modules"]["scraping"]:
-                print("Realizando scraping activo...")
-
-                for page in all_crawl_results:
-                    if "@" in page["url"]:
-                        continue  # URL no scrapeable
-
-                    result = self.scraper.scrape(page["url"])
-
-                    if not result:
+                    parsed = self.js_parser.parse(script_url, base_domain)
+                    if not parsed:
                         continue
 
-                    for e in result["emails_dom"]:
+                    parsed_scripts += 1
+
+                    self.database.insert_js_result(
+                        execution.ID,
+                        parsed["script_url"],
+                        parsed.get("emails", []),
+                        parsed.get("urls", [])
+                    )
+
+                    # Emails JS
+                    for e in parsed.get("emails", []):
                         email = normalize_email(e)
                         if email:
-                            emails_scraping_dom.add(email)  #Metricas
+                            emails_js.add(email)
 
                             if self._is_new_email(email, seen_emails):
                                 self.database.insert_email(
                                     execution.ID,
                                     email,
-                                    urlparse(page_url).hostname,
-                                    technique=C.TECHNIQUE_SCRAPING_DOM,
-                                    source=page["url"],
-                                    context="rendered_dom"
+                                    urlparse(script_url).netloc,
+                                    technique=C.TECHNIQUE_JS_STATIC,
+                                    source=script_url,
+                                    context="live"
                                 )
-                    for ctype, value, source in result["credentials_dom"]:
-                        creds_scraping_dom.add((ctype, value))  #Metricas
+
+                    # Credenciales JS
+                    raw_js = parsed.get("raw", "")
+                    creds = self.cred_parser.parse(raw_js, source=C.SOURCE_JS)
+
+                    for ctype, value, source in creds:
+                        creds_js.add((ctype, value))
 
                         if self._is_new_credential(ctype, value, seen_creds):
                             self.database.insert_credential(
                                 execution.ID,
                                 ctype,
                                 value,
-                                technique=C.TECHNIQUE_SCRAPING_DOM,
-                                source=page["url"],
-                                context="rendered"
+                                technique=C.TECHNIQUE_JS_STATIC,
+                                source=script_url,
+                                context="live"
                             )
 
-                    for e in result["emails_json"]:
-                        email = normalize_email(e)
-                        if email:
-                            emails_scraping_json.add(email)  #Metricas
+            print(f"[JS] Scripts parseados: {parsed_scripts}/{max_scripts}")
 
-                            if self._is_new_email(email, seen_emails):
-                                self.database.insert_email(
-                                    execution.ID,
-                                    email,
-                                    urlparse(page["url"]).netloc,
-                                    technique=C.TECHNIQUE_SCRAPING_JSON,
-                                    source=page["url"],
-                                    context="fetch/xhr"
-                                )
+        # -------------------------------------------------
+        # 7. Scraping activo (SOLO LIVE)
+        # -------------------------------------------------
 
-                    for ctype, value, source in result["credentials_json"]:
-                        creds_scraping_json.add((ctype, value))  # Metricas
+        if cfg["modules"]["scraping"]:
+            print("Realizando scraping activo (solo live)...")
 
-                        if self._is_new_credential(ctype, value, seen_creds):
-                            self.database.insert_credential(
+            for page in live_results:
+                if "@" in page["url"]:
+                    continue
+
+                result = self.scraper.scrape(page["url"])
+                if not result:
+                    continue
+
+                for e in result["emails_dom"]:
+                    email = normalize_email(e)
+                    if email:
+                        emails_scraping_dom.add(email)
+
+                        if self._is_new_email(email, seen_emails):
+                            self.database.insert_email(
                                 execution.ID,
-                                ctype,
-                                value,
+                                email,
+                                urlparse(page["url"]).hostname,
+                                technique=C.TECHNIQUE_SCRAPING_DOM,
+                                source=page["url"],
+                                context="rendered_dom"
+                            )
+
+                for ctype, value, source in result["credentials_dom"]:
+                    creds_scraping_dom.add((ctype, value))
+
+                    if self._is_new_credential(ctype, value, seen_creds):
+                        self.database.insert_credential(
+                            execution.ID,
+                            ctype,
+                            value,
+                            technique=C.TECHNIQUE_SCRAPING_DOM,
+                            source=page["url"],
+                            context="rendered"
+                        )
+
+                for e in result["emails_json"]:
+                    email = normalize_email(e)
+                    if email:
+                        emails_scraping_json.add(email)
+
+                        if self._is_new_email(email, seen_emails):
+                            self.database.insert_email(
+                                execution.ID,
+                                email,
+                                urlparse(page["url"]).netloc,
                                 technique=C.TECHNIQUE_SCRAPING_JSON,
                                 source=page["url"],
                                 context="fetch/xhr"
                             )
+
+                for ctype, value, source in result["credentials_json"]:
+                    creds_scraping_json.add((ctype, value))
+
+                    if self._is_new_credential(ctype, value, seen_creds):
+                        self.database.insert_credential(
+                            execution.ID,
+                            ctype,
+                            value,
+                            technique=C.TECHNIQUE_SCRAPING_JSON,
+                            source=page["url"],
+                            context="fetch/xhr"
+                        )
 
         #--------------------------------------------------
         # Métrica A/B (scraping vs no scraping)
