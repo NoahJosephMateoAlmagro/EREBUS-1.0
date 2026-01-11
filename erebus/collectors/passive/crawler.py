@@ -20,12 +20,13 @@ class Crawler:
 
         if isinstance(start_url, list):
             self.queue.extend(start_url)
-            first = start_url[0]
+            first = start_url[0] if start_url else ""
         else:
             self.queue.append(start_url)
             first = start_url
 
-        self.domain = urlparse(first).netloc
+        self.domain = urlparse(first).netloc if first else ""
+
 
     def _is_internal(self, url):
         parsed = urlparse(url)
@@ -95,7 +96,6 @@ class Crawler:
                 soup = BeautifulSoup(response.text, "html.parser")
 
                 # Emails SOLO de esta página
-                page_emails = set()
                 page_emails |= normalize_obfuscated(soup.get_text())
                 page_emails |= normalize_obfuscated(response.text)
 

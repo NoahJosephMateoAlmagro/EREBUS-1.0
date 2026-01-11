@@ -43,6 +43,9 @@ class Scraper:
 
                 page.on("response", handle_response)
 
+                if not url.endswith("/"):
+                    url = url + "/"
+
                 page.goto(url, timeout=self.timeout)
                 page.wait_for_load_state("networkidle", timeout=self.timeout)
 

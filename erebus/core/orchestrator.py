@@ -270,113 +270,73 @@ class Orchestrator:
                         )
 
         # -------------------------------------------------
-        # X. Wayback Machine (histórico)
+        # 5. Crawling HTML (LIVE + WAYBACK)
         # -------------------------------------------------
-
-        wayback_urls = set()
-
-        if cfg["modules"].get("wayback"):
-            print("Recolectando URLs históricas desde Wayback Machine...")
-
-            urls = self.wayback_collector.collect(execution.TARGET)
-
-            for url in urls:
-                wayback_urls.add(url)
-
-
-        # -------------------------------------------------
-        # 5. Crawling HTML
-        # -------------------------------------------------
-
-        # JS parsing y scraping dependen del crawler,
-        # ya que operan únicamente sobre recursos descubiertos
 
         if cfg["modules"]["crawler"]:
+            print("Buscando emails mediante crawler (live + wayback)...")
 
-            print("Buscando emails y JS mediante crawler...")
+            # URLs live
+            live_urls = list(self._build_crawl_urls(execution.TARGET))
 
-            crawl_urls = list(self._build_crawl_urls(execution.TARGET))
+            # URLs wayback
+            wayback_urls = set()
+            if cfg["modules"].get("wayback"):
+                print("Recolectando URLs históricas desde Wayback Machine...")
+                wayback_urls = self.wayback_collector.collect(execution.TARGET)
 
+            # Mezclar URLs
+            start_urls = list(dict.fromkeys(live_urls + list(wayback_urls)))
+
+            # Ejecutar crawler UNA SOLA VEZ
             crawler = self.crawler_cls(
-                crawl_urls,
+                start_url=start_urls,
                 max_pages=self.crawler_max_pages,
                 timeout=self.crawler_timeout,
-                allowed_domain = execution.TARGET
+                allowed_domain=execution.TARGET
             )
 
             crawl_results = crawler.run()
 
-            wayback_results = []
-
-            if wayback_urls:
-                wb_crawler = self.crawler_cls(
-                    list(wayback_urls),
-                    max_pages=cfg["limits"].get("wayback_pages", 20),
-                    timeout=self.crawler_timeout,
-                    allowed_domain="web.archive.org"
-                )
-
-                wayback_results = wb_crawler.run()
-                crawl_results.extend(wayback_results)
-
+            # Procesar resultados
             for page in crawl_results:
-
                 page_url = page["url"]
-                is_wayback =  "web.archive.org/web/" in page_url  #Para la métrica
+                domain = urlparse(page_url).netloc
 
+                is_wayback = "web.archive.org" in domain
 
                 self.database.insert_crawler_result(
                     execution.ID,
-                    page["url"],
+                    page_url,
                     page.get("emails", []),
                     page.get("links", []),
                     page.get("scripts", [])
                 )
 
-                # Emails HTML
+                # Emails
                 for e in page.get("emails", []):
                     email = normalize_email(e)
                     if not email:
                         continue
 
-                    # Métricas
                     emails_crawler.add(email)
                     if is_wayback:
                         emails_from_wayback.add(email)
                     else:
                         emails_from_live.add(email)
 
-                    # Persistencia
                     if self._is_new_email(email, seen_emails):
                         self.database.insert_email(
                             execution.ID,
                             email,
-                            urlparse(page_url).netloc,
+                            domain,
                             technique=C.TECHNIQUE_CRAWLER_HTML,
                             source=page_url,
                             context="wayback" if is_wayback else "live"
                         )
 
-                # Credenciales HTML
-                raw_html = page.get("raw_html", "")
-                creds = self.cred_parser.parse(raw_html, source=C.SOURCE_HTML)
-
-                for ctype, value, source in creds:
-
-                    creds_html.add((ctype, value)) #Metricas
-
-                    if self._is_new_credential(ctype, value, seen_creds):
-                        self.database.insert_credential(
-                            execution.ID,
-                            ctype,
-                            value,
-                            technique=C.TECHNIQUE_CRAWLER_HTML,
-                            source=page["url"],
-                            context=page["url"]
-                        )
-
             # -------------------------------------------------
-            # Parsing JS
+            # Parsing JS (Solo en los resultados del crawler. No del wayback. Podría tener js roto)
             # -------------------------------------------------
 
             if  cfg["modules"]["js_parsing"]:
@@ -448,7 +408,7 @@ class Orchestrator:
             if cfg["modules"]["scraping"]:
                 print("Realizando scraping activo...")
 
-                for page in crawl_results:
+                for page in all_crawl_results:
                     if "@" in page["url"]:
                         continue  # URL no scrapeable
 
@@ -466,7 +426,7 @@ class Orchestrator:
                                 self.database.insert_email(
                                     execution.ID,
                                     email,
-                                    urlparse(page["url"]).netloc,
+                                    urlparse(page_url).hostname,
                                     technique=C.TECHNIQUE_SCRAPING_DOM,
                                     source=page["url"],
                                     context="rendered_dom"
@@ -525,8 +485,7 @@ class Orchestrator:
         emails_scraping_new = emails_scraping_total - baseline
         creds_scraping_new = creds_scraping_total - baseline_creds
 
-        emails_total_with_wayback = baseline | emails_from_wayback
-
+        emails_total_with_wayback = emails_from_live | emails_from_wayback
 
         # ---- Logs ----
 
