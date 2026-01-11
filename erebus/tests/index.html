@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>EREBUS – Test completo de parsing</title>
+</head>
+<body>
+
+<h1>EREBUS Test Page</h1>
+
+<!-- ===================== -->
+<!-- EMAILS EN HTML PURO -->
+<!-- ===================== -->
+
+<p>Email directo: emailDirectoHTML@erebus.com</p>
+<p>Email directo mayúsculas: EMAILMAYUSCULASHTML@EREBUS.ORG</p>
+
+<p>Email ofuscado 1: ofuscado1 [at] erebus [dot] com</p>
+<p>Email ofuscado 2: ofuscado2 (at) erebus (dot) es</p>
+<p>Email ofuscado 3: ofuscado3 at erebus dot edu</p>
+
+<p>Email concatenado: emailconcatenado@erebus.esuniversidad</p>
+
+<!-- ===================== -->
+<!-- EMAILS EN BASE64 -->
+<!-- ===================== -->
+
+<p>Email base64:
+  ZW1haWxiYXNlNjRAZXJlYnVzLmNvbQ==
+</p>z
+
+<p>Email base64 2:
+  ZW1haWxiYXNlNjQoMilAZXJlYnVzLmNvbQ==
+</p>
+
+<!-- ===================== -->
+<!-- JS INLINE -->
+<!-- ===================== -->
+
+<script>
+  // Emails en JS
+  var email1 = "emailJS1@erebus.io";
+  var email2 = "emailJS2 [at] erebus [dot] host";
+
+  // Usuarios
+  var user = "admin";
+  var username = "root";
+  var login = "test_user";
+
+  // Passwords
+  var password = "admin123";
+  var pwd = "toor";
+  var pass = "123456";
+
+  // Tokens / claves
+  var apiKey = "APIKEY-123-SECRET";
+  var token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+  var secret = "SUPER-SECRET-VALUE";
+
+  document.body.innerHTML += "<p>emaildinamico@runtime.com</p>";
+
+</script>
+
+<!-- ===================== -->
+<!-- JS EXTERNO (MISMO DOMINIO) -->
+<!-- ===================== -->
+
+<script src="/test.js"></script>
+
+<script>
+fetch("/hidden.json")
+  .then(r => r.json())
+  .then(d => {
+    document.body.innerHTML += `
+      <p>${d.email}</p>
+    `;
+  });
+</script>
+
+
+
+</body>
+</html>
