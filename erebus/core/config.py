@@ -28,7 +28,7 @@ APP_CONFIG = {
         # -------------------------
         # HTTP requests (requests)
         # -------------------------
-        "http_crawler_page": 8,  # Crawler HTML (requests.get)
+        "http_crawler_page": 300,  # Crawler HTML (requests.get)
         "http_email_passive": 20,  # EmailCollector (HTML pasivo)
         "http_subdomains": 25,  # crt.sh
 

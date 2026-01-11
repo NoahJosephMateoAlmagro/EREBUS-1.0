@@ -13,7 +13,7 @@ class WaybackCollector:
         ".zip", ".rar", ".7z"
     )
 
-    def __init__(self, timeout=10, limit=50):
+    def __init__(self, timeout=10, limit=500):
         self.timeout = timeout
         self.limit = limit
 

@@ -15,17 +15,24 @@ class Scraper:
         self.cred_parser = CredentialParser()
 
     def scrape(self, url: str):
-        json_payloads = []
+        json_texts = []
+        json_objects = []
 
         def handle_response(response):
             try:
-                ct = response.headers.get("content-type", "")
-                if "application/json" in ct:
+                ct = response.headers.get("content-type", "").lower()
+                if "json" in ct or response.url.lower().endswith(".json"):
                     resp_domain = urlparse(response.url).netloc
                     page_domain = urlparse(url).netloc
 
                     if resp_domain == page_domain or resp_domain.endswith("." + page_domain):
-                        json_payloads.append(response.json())
+                        text = response.text()
+                        json_texts.append(text)
+
+                        try:
+                            json_objects.append(json.loads(text))
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
@@ -51,11 +58,11 @@ class Scraper:
                 source=C.TECHNIQUE_SCRAPING_DOM
             )
 
-            json_text = "\n".join(json.dumps(o) for o in json_payloads)
+            json_text = "\n".join(json_texts)
             emails_json = normalize_obfuscated(json_text)
 
             creds_json = []
-            for obj in json_payloads:
+            for obj in json_objects:
                 creds_json.extend(
                     self.cred_parser.parse_json(
                         obj,

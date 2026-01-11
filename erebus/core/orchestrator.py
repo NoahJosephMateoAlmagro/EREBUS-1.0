@@ -295,14 +295,7 @@ class Orchestrator:
 
             print("Buscando emails y JS mediante crawler...")
 
-            crawl_urls = set(self._build_crawl_urls(execution.TARGET))
-            crawl_urls = list(crawl_urls)
-
-            # URLs históricas Wayback
-            for url in wayback_urls:
-                parsed = urlparse(url)
-                if parsed.scheme in ("http", "https"):
-                    crawl_urls.append(url)
+            crawl_urls = list(self._build_crawl_urls(execution.TARGET))
 
             crawler = self.crawler_cls(
                 crawl_urls,
@@ -313,10 +306,23 @@ class Orchestrator:
 
             crawl_results = crawler.run()
 
+            wayback_results = []
+
+            if wayback_urls:
+                wb_crawler = self.crawler_cls(
+                    list(wayback_urls),
+                    max_pages=cfg["limits"].get("wayback_pages", 20),
+                    timeout=self.crawler_timeout,
+                    allowed_domain="web.archive.org"
+                )
+
+                wayback_results = wb_crawler.run()
+                crawl_results.extend(wayback_results)
+
             for page in crawl_results:
 
                 page_url = page["url"]
-                is_wayback =  "web.archive.org/web/" in page_url in page_url #Para la métrica
+                is_wayback =  "web.archive.org/web/" in page_url  #Para la métrica
 
 
                 self.database.insert_crawler_result(
@@ -419,11 +425,11 @@ class Orchestrator:
 
                             # Credenciales JS
                             raw_js = parsed.get("raw", "")
-                            creds = self.cred_parser.parse(raw_js, source=C.SOURCE_HTML)
+                            creds = self.cred_parser.parse(raw_js, source=C.SOURCE_JS)
 
                             for ctype, value, source in creds:
 
-                                creds_js.add(value)  #Metricas
+                                creds_js.add((ctype, value))  #Metricas
 
                                 if self._is_new_credential(ctype, value, seen_creds):
                                     self.database.insert_credential(
@@ -466,7 +472,7 @@ class Orchestrator:
                                     context="rendered_dom"
                                 )
                     for ctype, value, source in result["credentials_dom"]:
-                        creds_scraping_dom.add(value)  #Metricas
+                        creds_scraping_dom.add((ctype, value))  #Metricas
 
                         if self._is_new_credential(ctype, value, seen_creds):
                             self.database.insert_credential(
@@ -494,7 +500,7 @@ class Orchestrator:
                                 )
 
                     for ctype, value, source in result["credentials_json"]:
-                        creds_scraping_json.add(value)  # Metricas
+                        creds_scraping_json.add((ctype, value))  # Metricas
 
                         if self._is_new_credential(ctype, value, seen_creds):
                             self.database.insert_credential(

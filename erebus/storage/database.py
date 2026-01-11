@@ -1,9 +1,19 @@
 import sqlite3
-
+from pathlib import Path
 
 class Database:
     def __init__(self, path="erebus.db"):
-        self.conn = sqlite3.connect(path)
+
+        base_dir = Path(__file__).resolve().parent  # storage/
+        project_dir = base_dir.parent  # erebus/
+        db_dir = project_dir / "storage"
+        db_dir.mkdir(exist_ok=True)
+
+        self.db_path = db_dir / "erebus.db"
+        self.conn = sqlite3.connect(self.db_path)
+
+        print(f"[DB] Using database at: {self.db_path}")
+
         self.create_db()
 
     # -------------------------------------------------
