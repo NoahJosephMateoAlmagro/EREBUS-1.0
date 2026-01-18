@@ -167,6 +167,12 @@ class Orchestrator:
         emails_from_wayback = set()
         emails_from_live = set()
 
+        domains_dns_resolved = set()
+
+        scrape_urls_attempted = 0
+        scrape_urls_succeeded = 0
+        scrape_urls_failed = 0
+
         creds_html = set()
         creds_js = set()
         creds_scraping_dom = set()
@@ -231,6 +237,7 @@ class Orchestrator:
                         clean_domain,
                         C.DOMAIN_STATUS_RESOLVABLE
                     )
+                    domains_dns_resolved.add(clean_domain)
 
                     for r in dns_results:
                         self.database.insert_resolved_domain(
@@ -456,9 +463,13 @@ class Orchestrator:
                 if "@" in page["url"]:
                     continue
 
+                scrape_urls_attempted += 1
                 result = self.scraper.scrape(page["url"])
                 if not result:
+                    scrape_urls_failed += 1
                     continue
+
+                scrape_urls_succeeded += 1
 
                 for e in result["emails_dom"]:
                     email = normalize_email(e)
@@ -518,46 +529,69 @@ class Orchestrator:
 
         print("\n========== EXECUTION SUMMARY ==========")
 
+        # =================================================
+        # DOMAINS
+        # =================================================
         print("\n--- DOMAINS ---")
-        print(f"[DOMAINS] total descubiertos: {len(all_domains)}")
-        print(f"[DOMAINS] resueltos DNS: {len([d for d in seen_domains])}")
+        print(f"[DOMAINS] total_discovered: {len(all_domains)}")
+        print(f"[DOMAINS] dns_resolved: {len(domains_dns_resolved)}")
 
-        print("\n--- EMAILS ---")
-        print(f"[EMAILS] passive_html: {len(emails_html)}")
-        print(f"[EMAILS] crawler_html: {len(emails_crawler)}")
-        print(f"[EMAILS] js_static: {len(emails_js)}")
-        print(f"[EMAILS] scraping_dom: {len(emails_scraping_dom)}")
-        print(f"[EMAILS] scraping_json: {len(emails_scraping_json)}")
-        print(f"[EMAILS] scraping_total: {len(emails_scraping_dom | emails_scraping_json)}")
-        print(
-            f"[EMAILS] nuevas por scraping: {len((emails_scraping_dom | emails_scraping_json) - (emails_html | emails_crawler | emails_js))}")
+        # =================================================
+        # EMAILS (UNIQUE)
+        # =================================================
+        emails_scraping_total = emails_scraping_dom | emails_scraping_json
+        emails_baseline = emails_html | emails_crawler | emails_js
+        emails_all_sources = emails_baseline | emails_scraping_total
 
-        print("\n--- CREDENTIALS ---")
-        print(f"[CREDS] crawler_html: {len(creds_html)}")
-        print(f"[CREDS] js_static: {len(creds_js)}")
-        print(f"[CREDS] scraping_dom: {len(creds_scraping_dom)}")
-        print(f"[CREDS] scraping_json: {len(creds_scraping_json)}")
-        print(f"[CREDS] scraping_total: {len(creds_scraping_dom | creds_scraping_json)}")
-        print(
-            f"[CREDS] nuevas por scraping: {len((creds_scraping_dom | creds_scraping_json) - (creds_html | creds_js))}")
+        print("\n--- EMAILS (UNIQUE) ---")
+        print(f"[EMAILS] passive_html_unique: {len(emails_html)}")
+        print(f"[EMAILS] crawler_html_unique: {len(emails_crawler)}")
+        print(f"[EMAILS] js_static_unique: {len(emails_js)}")
+        print(f"[EMAILS] scraping_dom_unique: {len(emails_scraping_dom)}")
+        print(f"[EMAILS] scraping_json_unique: {len(emails_scraping_json)}")
+        print(f"[EMAILS] scraping_total_unique: {len(emails_scraping_total)}")
+        print(f"[EMAILS] new_from_scraping: {len(emails_scraping_total - emails_baseline)}")
+        print(f"[EMAILS] total_unique_all_sources: {len(emails_all_sources)}")
 
+        # =================================================
+        # CREDENTIALS (UNIQUE)
+        # =================================================
+        creds_scraping_total = creds_scraping_dom | creds_scraping_json
+        creds_baseline = creds_html | creds_js
+        creds_all_sources = creds_baseline | creds_scraping_total
+
+        print("\n--- CREDENTIALS (UNIQUE) ---")
+        print(f"[CREDS] crawler_html_unique: {len(creds_html)}")
+        print(f"[CREDS] js_static_unique: {len(creds_js)}")
+        print(f"[CREDS] scraping_dom_unique: {len(creds_scraping_dom)}")
+        print(f"[CREDS] scraping_json_unique: {len(creds_scraping_json)}")
+        print(f"[CREDS] scraping_total_unique: {len(creds_scraping_total)}")
+        print(f"[CREDS] new_from_scraping: {len(creds_scraping_total - creds_baseline)}")
+        print(f"[CREDS] total_unique_all_sources: {len(creds_all_sources)}")
+
+        # =================================================
+        # CRAWLING
+        # =================================================
         print("\n--- CRAWLING ---")
-        print(f"[CRAWLER] live páginas: {len(live_results)}")
-        print(f"[CRAWLER] wayback páginas: {len(wayback_results)}")
-        print(f"[CRAWLER] wayback URLs: {len(wayback_urls)}")
+        print(f"[CRAWLER] live_pages_visited: {len(live_results)}")
+        print(f"[CRAWLER] wayback_pages_visited: {len(wayback_results)}")
+        print(f"[CRAWLER] wayback_urls_collected: {len(wayback_urls)}")
 
+        # =================================================
+        # JAVASCRIPT
+        # =================================================
         print("\n--- JAVASCRIPT ---")
-        print(f"[JS] scripts parseados: {parsed_scripts}/{max_scripts}")
+        print(f"[JS] scripts_parsed_ok: {parsed_scripts}")
+        print(f"[JS] scripts_parse_limit: {max_scripts}")
 
+        # =================================================
+        # SCRAPING
+        # =================================================
         print("\n--- SCRAPING ---")
-        print(f"[SCRAPING] URLs intentadas: {len(live_results)}")
-        print(f"[SCRAPING] URLs exitosas: {len(emails_scraping_dom | emails_scraping_json)}")
-
-        print("\n--- DEDUP ---")
-        print(f"[DEDUP] emails únicos finales: {len(seen_emails)}")
-        print(f"[DEDUP] credenciales únicas finales: {len(seen_creds)}")
+        print(f"[SCRAPING] urls_attempted: {scrape_urls_attempted}")
+        print(f"[SCRAPING] urls_succeeded: {scrape_urls_succeeded}")
+        print(f"[SCRAPING] urls_failed: {scrape_urls_failed}")
 
         print("\n========== END SUMMARY ==========\n")
-
 
         self.database.insert_metrics(execution.ID)

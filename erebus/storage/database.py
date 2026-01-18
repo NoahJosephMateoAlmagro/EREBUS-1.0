@@ -341,19 +341,50 @@ class Database:
             WHERE execution_id = ?
         """, (execution_id, execution_id))
 
-        # Emails por técnica
-        for tech, count in cursor.execute("""
-            SELECT technique, COUNT(*)
+        # ======================
+        # EMAILS POR FUENTE
+        # ======================
+
+        # Emails from crawler (HTML)
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_crawler_html', COUNT(*)
             FROM email_results
             WHERE execution_id = ?
-            GROUP BY technique
-        """, (execution_id,)):
-            cursor.execute("""
-                INSERT INTO execution_metrics (execution_id, metric, value)
-                VALUES (?, ?, ?)
-            """, (execution_id, f"emails_{tech}", count))
+              AND technique = 'crawler_html'
+        """, (execution_id, execution_id))
 
-        # Cobertura scraping
+        # Emails from JS static parsing
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_js_static', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique = 'js_static'
+        """, (execution_id, execution_id))
+
+        # Emails from scraping DOM
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_scraping_dom', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique = 'scraping_dom'
+        """, (execution_id, execution_id))
+
+        # Emails from scraping JSON
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_scraping_json', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique = 'scraping_json'
+        """, (execution_id, execution_id))
+
+        # ======================
+        # COBERTURA SCRAPING
+        # ======================
+
         cursor.execute("""
             INSERT INTO execution_metrics (execution_id, metric, value)
             SELECT ?, 'emails_detected_by_scraping', COUNT(*)
@@ -370,7 +401,10 @@ class Database:
               AND technique NOT IN ('scraping_dom', 'scraping_json')
         """, (execution_id, execution_id))
 
-        # Live vs Wayback (usa context)
+        # ======================
+        # LIVE vs WAYBACK
+        # ======================
+
         cursor.execute("""
             INSERT INTO execution_metrics (execution_id, metric, value)
             SELECT ?, 'emails_from_live', COUNT(*)
