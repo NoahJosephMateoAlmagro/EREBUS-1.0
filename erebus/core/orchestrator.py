@@ -516,58 +516,48 @@ class Orchestrator:
                             context="fetch/xhr"
                         )
 
-        #--------------------------------------------------
-        # Métrica A/B (scraping vs no scraping)
-        # -------------------------------------------------
+        print("\n========== EXECUTION SUMMARY ==========")
 
-        baseline = emails_html | emails_crawler | emails_js
-        baseline_creds = creds_html | creds_js
+        print("\n--- DOMAINS ---")
+        print(f"[DOMAINS] total descubiertos: {len(all_domains)}")
+        print(f"[DOMAINS] resueltos DNS: {len([d for d in seen_domains])}")
 
-        emails_scraping_total = emails_scraping_dom | emails_scraping_json
-        creds_scraping_total = creds_scraping_dom | creds_scraping_json
-
-        emails_scraping_new = emails_scraping_total - baseline
-        creds_scraping_new = creds_scraping_total - baseline_creds
-
-        emails_total_with_wayback = emails_from_live | emails_from_wayback
-
-        # ---- Logs ----
-
+        print("\n--- EMAILS ---")
         print(f"[EMAILS] passive_html: {len(emails_html)}")
         print(f"[EMAILS] crawler_html: {len(emails_crawler)}")
         print(f"[EMAILS] js_static: {len(emails_js)}")
         print(f"[EMAILS] scraping_dom: {len(emails_scraping_dom)}")
         print(f"[EMAILS] scraping_json: {len(emails_scraping_json)}")
-        print(f"[EMAILS] scraping_total: {len(emails_scraping_total)}")
-        print(f"[EMAILS] nuevas por scraping: {len(emails_scraping_new)}")
+        print(f"[EMAILS] scraping_total: {len(emails_scraping_dom | emails_scraping_json)}")
+        print(
+            f"[EMAILS] nuevas por scraping: {len((emails_scraping_dom | emails_scraping_json) - (emails_html | emails_crawler | emails_js))}")
 
-        print(f"[CREDS] html: {len(creds_html)}")
+        print("\n--- CREDENTIALS ---")
+        print(f"[CREDS] crawler_html: {len(creds_html)}")
         print(f"[CREDS] js_static: {len(creds_js)}")
         print(f"[CREDS] scraping_dom: {len(creds_scraping_dom)}")
         print(f"[CREDS] scraping_json: {len(creds_scraping_json)}")
-        print(f"[CREDS] scraping_total: {len(creds_scraping_total)}")
-        print(f"[CREDS] nuevas por scraping: {len(creds_scraping_new)}")
+        print(f"[CREDS] scraping_total: {len(creds_scraping_dom | creds_scraping_json)}")
+        print(
+            f"[CREDS] nuevas por scraping: {len((creds_scraping_dom | creds_scraping_json) - (creds_html | creds_js))}")
 
-        # ---- Persistencia ----
+        print("\n--- CRAWLING ---")
+        print(f"[CRAWLER] live páginas: {len(live_results)}")
+        print(f"[CRAWLER] wayback páginas: {len(wayback_results)}")
+        print(f"[CRAWLER] wayback URLs: {len(wayback_urls)}")
 
-        self.database.insert_metric(execution.ID, "emails_passive_html", len(emails_html))
-        self.database.insert_metric(execution.ID, "emails_crawler_html", len(emails_crawler))
-        self.database.insert_metric(execution.ID, "emails_js_static", len(emails_js))
-        self.database.insert_metric(execution.ID, "emails_scraping_dom", len(emails_scraping_dom))
-        self.database.insert_metric(execution.ID, "emails_scraping_json", len(emails_scraping_json))
-        self.database.insert_metric(execution.ID, "emails_scraping_total", len(emails_scraping_total))
-        self.database.insert_metric(execution.ID, "emails_scraping_new", len(emails_scraping_new))
+        print("\n--- JAVASCRIPT ---")
+        print(f"[JS] scripts parseados: {parsed_scripts}/{max_scripts}")
 
-        self.database.insert_metric(execution.ID, "creds_html", len(creds_html))
-        self.database.insert_metric(execution.ID, "creds_js_static", len(creds_js))
-        self.database.insert_metric(execution.ID, "creds_scraping_dom", len(creds_scraping_dom))
-        self.database.insert_metric(execution.ID, "creds_scraping_json", len(creds_scraping_json))
-        self.database.insert_metric(execution.ID, "creds_scraping_total", len(creds_scraping_total))
-        self.database.insert_metric(execution.ID, "creds_scraping_new", len(creds_scraping_new))
+        print("\n--- SCRAPING ---")
+        print(f"[SCRAPING] URLs intentadas: {len(live_results)}")
+        print(f"[SCRAPING] URLs exitosas: {len(emails_scraping_dom | emails_scraping_json)}")
 
-        self.database.insert_metric(execution.ID,"wayback_urls",len(wayback_urls))
-        self.database.insert_metric(execution.ID, "emails_from_wayback", len(emails_from_wayback))
-        self.database.insert_metric(execution.ID,"emails_from_live",len(emails_from_live))
-        self.database.insert_metric(execution.ID,"emails_total_with_wayback",len(emails_total_with_wayback))
+        print("\n--- DEDUP ---")
+        print(f"[DEDUP] emails únicos finales: {len(seen_emails)}")
+        print(f"[DEDUP] credenciales únicas finales: {len(seen_creds)}")
+
+        print("\n========== END SUMMARY ==========\n")
 
 
+        self.database.insert_metrics(execution.ID)

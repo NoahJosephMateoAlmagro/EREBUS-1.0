@@ -1,20 +1,20 @@
-import sqlite3
 from pathlib import Path
+import sqlite3
 
 class Database:
-    def __init__(self, path="erebus.db"):
+    def __init__(self):
 
-        base_dir = Path(__file__).resolve().parent  # storage/
-        project_dir = base_dir.parent  # erebus/
-        db_dir = project_dir / "storage"
+        APP_ROOT = Path(__file__).resolve().parents[1]  # erebus/
+        db_dir = APP_ROOT / "storage"
         db_dir.mkdir(exist_ok=True)
 
         self.db_path = db_dir / "erebus.db"
         self.conn = sqlite3.connect(self.db_path)
 
-        print(f"[DB] Using database at: {self.db_path}")
+        print(f"[DB] Using database at: {self.db_path.resolve()}")
 
         self.create_db()
+
 
     # -------------------------------------------------
     # Creación de tablas
@@ -326,12 +326,108 @@ class Database:
     # Métricas resumen
     # -------------------------------------------------
 
-    def insert_metric(self, execution_id, metric, value):
+    def insert_metrics(self, execution_id: str):
         cursor = self.conn.cursor()
+
+        # ======================
+        # EMAILS
+        # ======================
+
+        # Total emails
         cursor.execute("""
             INSERT INTO execution_metrics (execution_id, metric, value)
-            VALUES (?, ?, ?)
-        """, (execution_id, metric, value))
+            SELECT ?, 'emails_total', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+        """, (execution_id, execution_id))
+
+        # Emails por técnica
+        for tech, count in cursor.execute("""
+            SELECT technique, COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+            GROUP BY technique
+        """, (execution_id,)):
+            cursor.execute("""
+                INSERT INTO execution_metrics (execution_id, metric, value)
+                VALUES (?, ?, ?)
+            """, (execution_id, f"emails_{tech}", count))
+
+        # Cobertura scraping
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_detected_by_scraping', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_detected_without_scraping', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique NOT IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
+        # Live vs Wayback (usa context)
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_from_live', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND context = 'live'
+        """, (execution_id, execution_id))
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_from_wayback', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND context = 'wayback'
+        """, (execution_id, execution_id))
+
+        # ======================
+        # CREDENCIALES
+        # ======================
+
+        # Total credenciales
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'creds_total', COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+        """, (execution_id, execution_id))
+
+        # Credenciales por técnica
+        for tech, count in cursor.execute("""
+            SELECT technique, COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+            GROUP BY technique
+        """, (execution_id,)):
+            cursor.execute("""
+                INSERT INTO execution_metrics (execution_id, metric, value)
+                VALUES (?, ?, ?)
+            """, (execution_id, f"creds_{tech}", count))
+
+        # Cobertura scraping en credenciales
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'creds_detected_by_scraping', COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+              AND technique IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'creds_detected_without_scraping', COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+              AND technique NOT IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
         self.conn.commit()
 
     # -------------------------------------------------
