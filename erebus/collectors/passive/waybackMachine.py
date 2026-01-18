@@ -41,6 +41,9 @@ class WaybackCollector:
 
         return True
 
+    def _build_snapshot_url(self, timestamp, original):
+        return f"https://web.archive.org/web/{timestamp}/{original}"
+
     def collect(self, domain: str):
         """
         Devuelve SOLO URLs históricas HTML válidas del dominio. No interesa acceder a archivos que no existen ya
@@ -50,9 +53,12 @@ class WaybackCollector:
         params = {
             "url": f"*.{domain}/*",
             "output": "json",
-            "fl": "original",
-            "collapse": "urlkey",
-            "filter": "statuscode:200",
+            "fl": "timestamp,original,mimetype,statuscode",
+            "filter": [
+                "statuscode:200",
+                "mimetype:text/html"
+            ],
+            "collapse": "digest",
             "limit": self.limit,
         }
 
@@ -75,10 +81,14 @@ class WaybackCollector:
 
             # Primera fila = cabecera
             for row in data[1:]:
-                url = row[0]
 
-                if self._is_valid_html_url(url):
-                    results.add(url)
+                timestamp, original, mimetype, status = row
+
+                if not self._is_valid_html_url(original):
+                    continue
+
+                snapshot_url = self._build_snapshot_url(timestamp, original)
+                results.add(snapshot_url)
 
 
         except requests.exceptions.RequestException as e:
