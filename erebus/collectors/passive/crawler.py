@@ -1,3 +1,5 @@
+from typing import Union, List
+
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
@@ -11,7 +13,7 @@ EMAIL_REGEX = re.compile(
 
 class Crawler:
 
-    def __init__(self, start_url: str, max_pages : int = 30, timeout: int = 8, allowed_domain = None):
+    def __init__(self, start_url: Union[str, List[str]], max_pages : int = 30, timeout: int = 8, allowed_domain = None):
         self.max_pages = max_pages
         self.timeout = timeout
         self.visited = set()

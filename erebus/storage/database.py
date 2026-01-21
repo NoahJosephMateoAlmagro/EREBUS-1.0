@@ -341,6 +341,7 @@ class Database:
             WHERE execution_id = ?
         """, (execution_id, execution_id))
 
+
         # ======================
         # EMAILS POR FUENTE
         # ======================
@@ -462,8 +463,20 @@ class Database:
               AND technique NOT IN ('scraping_dom', 'scraping_json')
         """, (execution_id, execution_id))
 
+
         self.conn.commit()
 
+
+
+
+    def get_execution_metrics(self, execution_id):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT metric, value
+            FROM execution_metrics
+            WHERE execution_id = ?
+        """, (execution_id,))
+        return {row[0]: row[1] for row in cursor.fetchall()}
     # -------------------------------------------------
     # Helpers
     # -------------------------------------------------

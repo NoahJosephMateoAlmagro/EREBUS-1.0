@@ -14,44 +14,44 @@ APP_CONFIG = {
         "js_parsing": False,
         "scraping": False,
         "wayback": True
-
     },
 
     "limits": {
-        "max_dns": 20,
-        "max_pages": 300,
-        "max_scripts": 15
+        # DNS
+        "dns_max_domains": 20,
+
+        # Crawling
+        "crawler_live_max_pages": 300,
+        "crawler_wayback_max_pages": 30,
+
+        # Wayback (CDX)
+        "wayback_max_snapshots": 50,
+        "wayback_min_year": 2008,
+
+        # JS
+        "js_max_scripts": 15,
     },
 
     "timeouts": {
+        # HTTP (requests)
+        "http_passive_email": 20,
+        "http_subdomains": 25,
 
-        # -------------------------
-        # HTTP requests (requests)
-        # -------------------------
-        "http_crawler_page": 300,  # Crawler HTML (requests.get)
-        "http_email_passive": 20,  # EmailCollector (HTML pasivo)
-        "http_subdomains": 25,  # crt.sh
-
-        # -------------------------
         # DNS
-        # -------------------------
-        "dns_resolution": 5,  # dns.resolver lifetime
+        "dns_resolution": 5,
 
-        # -------------------------
-        # JS static parsing
-        # -------------------------
-        "js_connect": 3,  # conexión HTTP
-        "js_read": 5,  # lectura contenido JS
+        # Crawler (requests)
+        "crawler_live_page": 3,
+        "crawler_wayback_page": 8,
 
-        # -------------------------
+        # JS
+        "js_connect": 3,
+        "js_read": 5,
+
         # Active scraping (Playwright)
-        # -------------------------
-        "scraping_page_load": 15000,  # ms (page.goto / networkidle)
+        "scraping_page_load": 15000,  # ms
 
-        # -------------------------
-        # Fuentes externas
-        # -------------------------
-        "wayback_timeout": 300
+        # Wayback API (CDX)
+        "wayback_cdx_api": 10
     }
-
 }

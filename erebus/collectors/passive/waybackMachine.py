@@ -13,9 +13,10 @@ class WaybackCollector:
         ".zip", ".rar", ".7z"
     )
 
-    def __init__(self, timeout=10, limit=500):
+    def __init__(self, timeout=10, limit=500, min_year=2008):
         self.timeout = timeout
         self.limit = limit
+        self.min_year = min_year
 
     def _is_valid_html_url(self, url: str) -> bool:
         """
@@ -53,11 +54,7 @@ class WaybackCollector:
         params = {
             "url": f"*.{domain}/*",
             "output": "json",
-            "fl": "timestamp,original,mimetype,statuscode",
-            "filter": [
-                "statuscode:200",
-                "mimetype:text/html"
-            ],
+            "fl": "timestamp,original,statuscode",
             "collapse": "digest",
             "limit": self.limit,
         }
@@ -79,16 +76,29 @@ class WaybackCollector:
 
             data = r.json()
 
+            print(f"[WAYBACK][DEBUG] CDX rows: {len(data) - 1}")
+
             # Primera fila = cabecera
             for row in data[1:]:
 
-                timestamp, original, mimetype, status = row
+                timestamp, original, status = row
+
+                year = int(timestamp[:4])
+
+                if status != "200":
+                    continue
+
+                if year < self.min_year:
+                    continue
 
                 if not self._is_valid_html_url(original):
                     continue
 
                 snapshot_url = self._build_snapshot_url(timestamp, original)
                 results.add(snapshot_url)
+
+                print(f"[WAYBACK][DEBUG] example snapshot: {timestamp} {original}")
+                break
 
 
         except requests.exceptions.RequestException as e:

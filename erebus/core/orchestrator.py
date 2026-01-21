@@ -13,19 +13,61 @@ from normalizers.email_normalizer import normalize_email
 from collectors.passive.waybackMachine import WaybackCollector
 
 import core.constants as C
-
-
+from core.execution_stats import ExecutionStats
 
 class Orchestrator:
 
     def __init__(self, database):
         self.database = database
 
+    # -------------------------------------------------
+    # Utils - Prints
+    # -------------------------------------------------
+    def _print_summary(self, metrics, stats):
+        print("\n========== SUMARY ==========")
+        self._print_db_metrics(metrics)
+        self._print_execution_stats(stats)
+        print("\n========== END SUMARY ==========")
+    def _print_db_metrics(self, metrics):
+        print("\n========== DB METRICS ==========")
+
+        print("\n--- EMAILS ---")
+        print(f"[EMAILS] total: {metrics.get('emails_total', 0)}")
+        print(f"[EMAILS] crawler_html: {metrics.get('emails_crawler_html', 0)}")
+        print(f"[EMAILS] js_static: {metrics.get('emails_js_static', 0)}")
+        print(f"[EMAILS] scraping_dom: {metrics.get('emails_scraping_dom', 0)}")
+        print(f"[EMAILS] scraping_json: {metrics.get('emails_scraping_json', 0)}")
+        print(f"[EMAILS] detected_by_scraping: {metrics.get('emails_detected_by_scraping', 0)}")
+        print(f"[EMAILS] detected_without_scraping: {metrics.get('emails_detected_without_scraping', 0)}")
+
+        print("\n--- CREDENTIALS ---")
+        print(f"[CREDS] total: {metrics.get('creds_total', 0)}")
+        print(f"[CREDS] creds_detected_by_scraping: {metrics.get('creds_detected_by_scraping', 0)}")
+        print(f"[CREDS] creds_detected_without_scraping: {metrics.get('creds_detected_without_scraping', 0)}")
+
+        print("\n========== END METRICS ==========\n")
+    def _print_execution_stats (self, stats: ExecutionStats):
+
+        print("\n========== EXECUTION STATS ==========")
+
+        print("\n--- CRAWLER ---")
+        print(f"[CRAWLER] live pages visited: {stats.live_pages_visited}")
+        print(f"[CRAWLER] wayback urls collected: {stats.wayback_urls_collected}")
+        print(f"[CRAWLER] wayback pages visited: {stats.wayback_pages_visited}")
+
+        print("\n--- JS PARSING ---")
+        print(f"[JS] scripts parsed: {stats.scripts_parsed_ok}/{stats.scripts_parse_limit}")
+
+        print("\n--- SCRAPING ---")
+        print(f"[SCRAPING] attempted: {stats.scrape_attempted}")
+        print(f"[SCRAPING] succeeded: {stats.scrape_succeeded}")
+        print(f"[SCRAPING] failed: {stats.scrape_failed}")
+
+        print("\n========== END STATS ==========\n")
 
     # -------------------------------------------------
-    # Utils
+    # Utils - Validations
     # -------------------------------------------------
-
     def _is_valid_domain(self, value: str):
         if not value:
             return None
@@ -63,15 +105,15 @@ class Orchestrator:
         if not isinstance(cfg, dict):
             raise TypeError("Configuración inválida: cfg debe ser un dict")
 
-        if "modules" not in cfg or "limits" not in cfg:
+        if "modules" not in cfg or "limits" not in cfg or "timeouts" not in cfg:
             raise ValueError(
                 "Configuración inválida: se esperaban las claves 'modules' y 'limits'"
             )
-    def _init_collectors(self, cfg):
 
-        # -------------------------------------------------
-        # Inicialización de collectors (desde cfg)
-        # -------------------------------------------------
+    # -------------------------------------------------
+    # Utils - Initialization
+    # -------------------------------------------------
+    def _init_collectors(self, cfg):
 
         # Pasivos
         self.subdomain_collector = SubdomainCollector(
@@ -85,13 +127,16 @@ class Orchestrator:
         )
 
         self.email_collector = EmailCollector(
-            timeout=cfg["timeouts"]["http_email_passive"]
+            timeout=cfg["timeouts"]["http_passive_email"]
         )
 
-        # Crawler
+        # Crawler (LIVE / WAYBACK separados)
         self.crawler_cls = Crawler
-        self.crawler_timeout = cfg["timeouts"]["http_crawler_page"]
-        self.crawler_max_pages = int(cfg["limits"]["max_pages"])
+        self.crawler_live_timeout = cfg["timeouts"]["crawler_live_page"]
+        self.crawler_live_max_pages = int(cfg["limits"]["crawler_live_max_pages"])
+
+        self.crawler_wayback_timeout = cfg["timeouts"]["crawler_wayback_page"]
+        self.crawler_wayback_max_pages = int(cfg["limits"]["crawler_wayback_max_pages"])
 
         # JS
         self.js_parser = JSParser(
@@ -107,15 +152,15 @@ class Orchestrator:
             timeout=cfg["timeouts"]["scraping_page_load"]
         )
 
-        # Emails en URLS históricas
-
+        # Wayback (CDX)
         self.wayback_collector = WaybackCollector(
-            timeout=cfg["timeouts"].get("wayback_timeout", 10),
-            limit=cfg["limits"].get("wayback_urls", 50)
+            timeout=cfg["timeouts"]["wayback_cdx_api"],
+            limit=cfg["limits"]["wayback_max_snapshots"],
+            min_year=cfg["limits"]["wayback_min_year"]
         )
 
     # -----------------------------
-    # Dedup logic (orchestration)
+    # Utils - Dedup logic (orchestration)
     # -----------------------------
 
     # Sets de deduplicado lógico.
@@ -138,15 +183,317 @@ class Orchestrator:
             return False
         seen.add(domain)
         return True
+
+
     # -------------------------------------------------
     # Main
     # -------------------------------------------------
+
+    def _run_subdomains(self, execution, all_domains, seen_domains):
+        print("Encontrando subdominios...")
+        subdomains = self.subdomain_collector.collect(execution.TARGET)
+
+        for s in subdomains:
+            domain = self._is_valid_domain(s.get("value"))
+            if domain:
+                all_domains.add(domain)
+
+        for domain in all_domains:
+            if self._is_new_domain(domain, seen_domains):
+                self.database.insert_domain(
+                    execution.ID,
+                    domain,
+                    source=C.TECHNIQUE_SUBDOMAINS,
+                    status=C.DOMAIN_STATUS_NOT_EVALUATED
+                )
+    def _run_dns(self, execution, cfg, all_domains):
+        print("Resolviendo DNS...")
+
+        max_dns = int(cfg["limits"]["dns_max_domains"])
+        domains_to_resolve = list(all_domains)[:max_dns]
+
+        for domain in domains_to_resolve:
+            clean_domain = self._is_valid_domain(domain)
+            if not clean_domain:
+                continue
+
+            dns_results = self.dns_collector.collect(clean_domain)
+
+            if dns_results:
+                self.database.update_domain_status(
+                    execution.ID,
+                    clean_domain,
+                    C.DOMAIN_STATUS_RESOLVABLE
+                )
+
+                for r in dns_results:
+                    self.database.insert_resolved_domain(
+                        execution.ID,
+                        r["domain"],
+                        r["ip"],
+                        r["source"]
+                    )
+            else:
+                self.database.update_domain_status(
+                    execution.ID,
+                    clean_domain,
+                    C.DOMAIN_STATUS_NOT_RESOLVABLE
+                )
+    def _run_whois(self, execution):
+        print("Consultando WHOIS...")
+        whois_data = self.whois_collector.collect(execution.TARGET)
+        if whois_data:
+            self.database.insert_whois_result(
+                execution.ID,
+                execution.TARGET,
+                whois_data
+            )
+    def _run_passive_emails(self, execution, seen_emails):
+        print("Buscando emails pasivos...")
+        email_results = self.email_collector.collect(execution.TARGET)
+
+        for r in email_results:
+            email = normalize_email(r["value"])
+            if not email:
+                continue
+
+            if self._is_new_email(email, seen_emails):
+                self.database.insert_email(
+                    execution.ID,
+                    email,
+                    execution.TARGET,
+                    technique=C.TECHNIQUE_PASSIVE_HTML,
+                    source=r["context"],
+                    context=r["context"]
+                )
+    def _run_crawler(self, execution, cfg, stats):
+        print("Buscando emails mediante crawler (live + wayback)...")
+
+        wayback_results = []
+
+        # -------------------------
+        # LIVE CRAWLER
+        # -------------------------
+        live_urls = list(self._build_crawl_urls(execution.TARGET))
+
+        crawler_live = self.crawler_cls(
+            start_url=live_urls,
+            max_pages=self.crawler_live_max_pages,
+            timeout=self.crawler_live_timeout,
+            allowed_domain=execution.TARGET
+        )
+
+        live_results = crawler_live.run()
+        stats.live_pages_visited = len(live_results)
+
+        for page in live_results:
+            page["origin"] = "live"
+
+        # -------------------------
+        # WAYBACK CRAWLER
+        # -------------------------
+        if cfg["modules"].get("wayback"):
+            print("Recolectando URLs históricas desde Wayback Machine...")
+            wayback_urls = self.wayback_collector.collect(execution.TARGET)
+            stats.wayback_urls_collected = len(wayback_urls)
+
+            if wayback_urls:
+                crawler_wb = self.crawler_cls(
+                    start_url = list(wayback_urls),
+                    max_pages=self.crawler_wayback_max_pages,
+                    timeout=self.crawler_wayback_timeout,
+                    allowed_domain=None
+                )
+
+                wayback_results = crawler_wb.run()
+                stats.wayback_pages_visited = len(wayback_results)
+
+                for page in wayback_results:
+                    page["origin"] = "wayback"
+
+        return live_results, wayback_results
+    def _process_crawl_results(self,execution,crawl_results,seen_emails,seen_creds):
+
+        for page in crawl_results:
+            page_url = page["url"]
+            domain = urlparse(page_url).netloc
+            origin = page.get("origin", "unknown")
+
+            self.database.insert_crawler_result(
+                execution.ID,
+                page_url,
+                page.get("emails", []),
+                page.get("links", []),
+                page.get("scripts", [])
+            )
+
+            # Emails HTML
+            for e in page.get("emails", []):
+                email = normalize_email(e)
+                if not email:
+                    continue
+
+                if self._is_new_email(email, seen_emails):
+                    self.database.insert_email(
+                        execution.ID,
+                        email,
+                        domain,
+                        technique=C.TECHNIQUE_CRAWLER_HTML,
+                        source=page_url,
+                        context=origin
+                    )
+
+            # Credenciales HTML
+            raw_html = page.get("raw_html", "")
+            creds = self.cred_parser.parse(raw_html, source=C.SOURCE_HTML)
+
+            for ctype, value, source in creds:
+
+                if self._is_new_credential(ctype, value, seen_creds):
+                    self.database.insert_credential(
+                        execution.ID,
+                        ctype,
+                        value,
+                        technique=C.TECHNIQUE_CRAWLER_HTML,
+                        source=page_url,
+                        context=origin
+                    )
+    def _run_js_parsing(self, execution, cfg, live_results, seen_emails, seen_creds, stats):
+        print("Parseando JS (solo live)...")
+
+        stats.scripts_parse_limit = int(cfg["limits"]["js_max_scripts"])
+
+        if not live_results:
+            print("[JS] No hay páginas LIVE, se omite parsing JS")
+
+        base_domain = urlparse(live_results[0]["url"]).netloc
+
+        for page in live_results:
+            if stats.scripts_parsed_ok >= stats.scripts_parse_limit:
+                break
+
+            if "@" in page["url"]:
+                continue
+
+            for script_url in page.get("scripts", []):
+                if stats.scripts_parsed_ok >= stats.scripts_parse_limit:
+                    break
+
+                parsed = self.js_parser.parse(script_url, base_domain)
+                if not parsed:
+                    continue
+
+                stats.scripts_parsed_ok += 1
+
+                self.database.insert_js_result(
+                    execution.ID,
+                    parsed["script_url"],
+                    parsed.get("emails", []),
+                    parsed.get("urls", [])
+                )
+
+                # Emails JS
+                for e in parsed.get("emails", []):
+                    email = normalize_email(e)
+
+                    if email:
+
+                        if self._is_new_email(email, seen_emails):
+
+                            self.database.insert_email(
+                                execution.ID,
+                                email,
+                                urlparse(script_url).netloc,
+                                technique=C.TECHNIQUE_JS_STATIC,
+                                source=script_url,
+                                context="live"
+                            )
+
+                # Credenciales JS
+                raw_js = parsed.get("raw", "")
+                creds = self.cred_parser.parse(raw_js, source=C.SOURCE_JS)
+
+                for ctype, value, source in creds:
+
+                    if self._is_new_credential(ctype, value, seen_creds):
+                        self.database.insert_credential(
+                            execution.ID,
+                            ctype,
+                            value,
+                            technique=C.TECHNIQUE_JS_STATIC,
+                            source=script_url,
+                            context="live"
+                        )
+    def _run_scraping(self, execution, live_results, seen_emails, seen_creds, stats):
+        print("Realizando scraping activo (solo live)...")
+
+        if not live_results:
+            print("[SCRAPING] No hay páginas LIVE, se omite scraping")
+
+        for page in live_results:
+            if "@" in page["url"]:
+                continue
+
+            stats.scrape_attempted += 1
+            result = self.scraper.scrape(page["url"])
+            if not result:
+                stats.scrape_failed += 1
+                continue
+
+            stats.scrape_succeeded += 1
+
+            for e in result["emails_dom"]:
+                email = normalize_email(e)
+                if email and self._is_new_email(email, seen_emails):
+                    self.database.insert_email(
+                        execution.ID,
+                        email,
+                        urlparse(page["url"]).hostname,
+                        technique=C.TECHNIQUE_SCRAPING_DOM,
+                        source=page["url"],
+                        context="rendered_dom"
+                    )
+
+            for ctype, value, source in result["credentials_dom"]:
+                if self._is_new_credential(ctype, value, seen_creds):
+                    self.database.insert_credential(
+                        execution.ID,
+                        ctype,
+                        value,
+                        technique=C.TECHNIQUE_SCRAPING_DOM,
+                        source=page["url"],
+                        context="rendered"
+                    )
+
+            for e in result["emails_json"]:
+                email = normalize_email(e)
+                if email and self._is_new_email(email, seen_emails):
+                    self.database.insert_email(
+                        execution.ID,
+                        email,
+                        urlparse(page["url"]).netloc,
+                        technique=C.TECHNIQUE_SCRAPING_JSON,
+                        source=page["url"],
+                        context="fetch/xhr"
+                    )
+
+            for ctype, value, source in result["credentials_json"]:
+                if self._is_new_credential(ctype, value, seen_creds):
+                    self.database.insert_credential(
+                        execution.ID,
+                        ctype,
+                        value,
+                        technique=C.TECHNIQUE_SCRAPING_JSON,
+                        source=page["url"],
+                        context="fetch/xhr"
+                    )
 
 
     def run(self, execution, cfg):
 
         self._validate_cfg(cfg)
         self._init_collectors(cfg)
+        stats = ExecutionStats()
 
         # -------------------------------------------------
         # 0. Estado inicial
@@ -159,24 +506,7 @@ class Orchestrator:
         all_domains = set()
         all_domains.add(execution.TARGET)
 
-        emails_html = set()
-        emails_crawler = set()
-        emails_js = set()
-        emails_scraping_dom = set()
-        emails_scraping_json = set()
-        emails_from_wayback = set()
-        emails_from_live = set()
-
-        domains_dns_resolved = set()
-
-        scrape_urls_attempted = 0
-        scrape_urls_succeeded = 0
-        scrape_urls_failed = 0
-
-        creds_html = set()
-        creds_js = set()
-        creds_scraping_dom = set()
-        creds_scraping_json = set()
+        live_results = []
 
 
         # -------------------------------------------------
@@ -184,414 +514,69 @@ class Orchestrator:
         # -------------------------------------------------
 
         if cfg["modules"]["subdomains"]:
-            print("Encontrando subdominios...")
-            subdomains = self.subdomain_collector.collect(execution.TARGET)
-
-            for s in subdomains:
-                domain = self._is_valid_domain(s.get("value"))
-                if domain:
-                    all_domains.add(domain)
-
-            for domain in all_domains:
-                if self._is_new_domain(domain, seen_domains):
-                    self.database.insert_domain(
-                        execution.ID,
-                        domain,
-                        source=C.TECHNIQUE_SUBDOMAINS,
-                        status=C.DOMAIN_STATUS_NOT_EVALUATED
-                    )
+            self._run_subdomains(execution, all_domains, seen_domains)
 
         # -------------------------------------------------
         # 2. WHOIS
         # -------------------------------------------------
 
         if cfg["modules"]["whois"]:
-            print("Consultando WHOIS...")
-            whois_data = self.whois_collector.collect(execution.TARGET)
-            if whois_data:
-                self.database.insert_whois_result(
-                    execution.ID,
-                    execution.TARGET,
-                    whois_data
-                )
+            self._run_whois(execution)
 
         # -------------------------------------------------
         # 3. DNS
         # -------------------------------------------------
 
         if cfg["modules"]["dns"]:
-            print("Resolviendo DNS...")
-            max_dns = int(cfg["limits"]["max_dns"])
-            domains_to_resolve = list(all_domains)[:max_dns]
-
-            for domain in domains_to_resolve:
-                clean_domain = self._is_valid_domain(domain)
-                if not clean_domain:
-                    continue
-
-                dns_results = self.dns_collector.collect(clean_domain)
-
-                if dns_results:
-                    self.database.update_domain_status(
-                        execution.ID,
-                        clean_domain,
-                        C.DOMAIN_STATUS_RESOLVABLE
-                    )
-                    domains_dns_resolved.add(clean_domain)
-
-                    for r in dns_results:
-                        self.database.insert_resolved_domain(
-                            execution.ID,
-                            r["domain"],
-                            r["ip"],
-                            r["source"]
-                        )
-                else:
-                    self.database.update_domain_status(
-                        execution.ID,
-                        clean_domain,
-                        C.DOMAIN_STATUS_NOT_RESOLVABLE
-                    )
+            self._run_dns(execution, cfg, all_domains)
 
         # -------------------------------------------------
         # 4. Emails pasivos (HTML simple)
         # -------------------------------------------------
 
         if cfg["modules"]["emails_passive"]:
-            print("Buscando emails pasivos...")
-            email_results = self.email_collector.collect(execution.TARGET)
-
-            for r in email_results:
-                email = normalize_email(r["value"])
-                if email:
-                    emails_html.add(email)  # Métricas
-
-                    if self._is_new_email(email, seen_emails):
-                        self.database.insert_email(
-                            execution.ID,
-                            email,
-                            execution.TARGET,
-                            technique=C.TECHNIQUE_PASSIVE_HTML,
-                            source=r["context"],
-                            context=r["context"]
-                        )
+            self._run_passive_emails(execution, seen_emails)
 
         # -------------------------------------------------
         # 5. Crawling HTML (LIVE + WAYBACK)
         # -------------------------------------------------
 
         if cfg["modules"]["crawler"]:
-            print("Buscando emails mediante crawler (live + wayback)...")
+            live_results, wayback_results = self._run_crawler(execution, cfg, stats)
 
-            live_results = []
-            wayback_results = []
-
-            # -------------------------
-            # LIVE CRAWLER
-            # -------------------------
-            live_urls = list(self._build_crawl_urls(execution.TARGET))
-
-            crawler_live = self.crawler_cls(
-                start_url=live_urls,
-                max_pages=self.crawler_max_pages,
-                timeout=self.crawler_timeout,
-                allowed_domain=execution.TARGET
-            )
-
-            live_results = crawler_live.run()
-
-            for page in live_results:
-                page["origin"] = "live"
-
-            # -------------------------
-            # WAYBACK CRAWLER (SOLO HTML)
-            # -------------------------
-            if cfg["modules"].get("wayback"):
-                print("Recolectando URLs históricas desde Wayback Machine...")
-                wayback_urls = self.wayback_collector.collect(execution.TARGET)
-
-                if wayback_urls:
-                    crawler_wb = self.crawler_cls(
-                        start_url=list(wayback_urls),
-                        max_pages=cfg["limits"].get("wayback_pages", 20),
-                        timeout=self.crawler_timeout,
-                        allowed_domain=None
-                    )
-
-                    wayback_results = crawler_wb.run()
-
-                    for page in wayback_results:
-                        page["origin"] = "wayback"
-
-            # -------------------------
-            # PROCESADO HTML UNIFICADO
-            # -------------------------
-            all_crawl_results = live_results + wayback_results
-
-            for page in all_crawl_results:
-                page_url = page["url"]
-                domain = urlparse(page_url).netloc
-                origin = page["origin"]
-
-                self.database.insert_crawler_result(
-                    execution.ID,
-                    page_url,
-                    page.get("emails", []),
-                    page.get("links", []),
-                    page.get("scripts", [])
-                )
-
-                # Emails HTML
-                for e in page.get("emails", []):
-                    email = normalize_email(e)
-                    if not email:
-                        continue
-
-                    emails_crawler.add(email)
-
-                    if origin == "wayback":
-                        emails_from_wayback.add(email)
-                    else:
-                        emails_from_live.add(email)
-
-                    if self._is_new_email(email, seen_emails):
-                        self.database.insert_email(
-                            execution.ID,
-                            email,
-                            domain,
-                            technique=C.TECHNIQUE_CRAWLER_HTML,
-                            source=page_url,
-                            context=origin
-                        )
-
-                # Credenciales HTML
-                raw_html = page.get("raw_html", "")
-                creds = self.cred_parser.parse(raw_html, source=C.SOURCE_HTML)
-
-                for ctype, value, source in creds:
-                    creds_html.add((ctype, value))
-
-                    if self._is_new_credential(ctype, value, seen_creds):
-                        self.database.insert_credential(
-                            execution.ID,
-                            ctype,
-                            value,
-                            technique=C.TECHNIQUE_CRAWLER_HTML,
-                            source=page_url,
-                            context=origin
-                        )
+            self._process_crawl_results(
+                execution,
+                live_results + wayback_results,
+                seen_emails,
+                seen_creds)
 
         # -------------------------------------------------
         # 6. Parsing JS (SOLO LIVE)
         # -------------------------------------------------
 
         if cfg["modules"]["js_parsing"]:
-            print("Parseando JS (solo live)...")
-
-            max_scripts = int(cfg["limits"]["max_scripts"])
-            parsed_scripts = 0
-
-            base_domain = urlparse(live_urls[0]).netloc
-
-            for page in live_results:
-                if parsed_scripts >= max_scripts:
-                    break
-
-                if "@" in page["url"]:
-                    continue
-
-                for script_url in page.get("scripts", []):
-                    if parsed_scripts >= max_scripts:
-                        break
-
-                    parsed = self.js_parser.parse(script_url, base_domain)
-                    if not parsed:
-                        continue
-
-                    parsed_scripts += 1
-
-                    self.database.insert_js_result(
-                        execution.ID,
-                        parsed["script_url"],
-                        parsed.get("emails", []),
-                        parsed.get("urls", [])
-                    )
-
-                    # Emails JS
-                    for e in parsed.get("emails", []):
-                        email = normalize_email(e)
-                        if email:
-                            emails_js.add(email)
-
-                            if self._is_new_email(email, seen_emails):
-                                self.database.insert_email(
-                                    execution.ID,
-                                    email,
-                                    urlparse(script_url).netloc,
-                                    technique=C.TECHNIQUE_JS_STATIC,
-                                    source=script_url,
-                                    context="live"
-                                )
-
-                    # Credenciales JS
-                    raw_js = parsed.get("raw", "")
-                    creds = self.cred_parser.parse(raw_js, source=C.SOURCE_JS)
-
-                    for ctype, value, source in creds:
-                        creds_js.add((ctype, value))
-
-                        if self._is_new_credential(ctype, value, seen_creds):
-                            self.database.insert_credential(
-                                execution.ID,
-                                ctype,
-                                value,
-                                technique=C.TECHNIQUE_JS_STATIC,
-                                source=script_url,
-                                context="live"
-                            )
-
-            print(f"[JS] Scripts parseados: {parsed_scripts}/{max_scripts}")
+            self._run_js_parsing(
+                execution,
+                cfg,
+                live_results,
+                seen_emails,
+                seen_creds, stats)
 
         # -------------------------------------------------
         # 7. Scraping activo (SOLO LIVE)
         # -------------------------------------------------
 
         if cfg["modules"]["scraping"]:
-            print("Realizando scraping activo (solo live)...")
-
-            for page in live_results:
-                if "@" in page["url"]:
-                    continue
-
-                scrape_urls_attempted += 1
-                result = self.scraper.scrape(page["url"])
-                if not result:
-                    scrape_urls_failed += 1
-                    continue
-
-                scrape_urls_succeeded += 1
-
-                for e in result["emails_dom"]:
-                    email = normalize_email(e)
-                    if email:
-                        emails_scraping_dom.add(email)
-
-                        if self._is_new_email(email, seen_emails):
-                            self.database.insert_email(
-                                execution.ID,
-                                email,
-                                urlparse(page["url"]).hostname,
-                                technique=C.TECHNIQUE_SCRAPING_DOM,
-                                source=page["url"],
-                                context="rendered_dom"
-                            )
-
-                for ctype, value, source in result["credentials_dom"]:
-                    creds_scraping_dom.add((ctype, value))
-
-                    if self._is_new_credential(ctype, value, seen_creds):
-                        self.database.insert_credential(
-                            execution.ID,
-                            ctype,
-                            value,
-                            technique=C.TECHNIQUE_SCRAPING_DOM,
-                            source=page["url"],
-                            context="rendered"
-                        )
-
-                for e in result["emails_json"]:
-                    email = normalize_email(e)
-                    if email:
-                        emails_scraping_json.add(email)
-
-                        if self._is_new_email(email, seen_emails):
-                            self.database.insert_email(
-                                execution.ID,
-                                email,
-                                urlparse(page["url"]).netloc,
-                                technique=C.TECHNIQUE_SCRAPING_JSON,
-                                source=page["url"],
-                                context="fetch/xhr"
-                            )
-
-                for ctype, value, source in result["credentials_json"]:
-                    creds_scraping_json.add((ctype, value))
-
-                    if self._is_new_credential(ctype, value, seen_creds):
-                        self.database.insert_credential(
-                            execution.ID,
-                            ctype,
-                            value,
-                            technique=C.TECHNIQUE_SCRAPING_JSON,
-                            source=page["url"],
-                            context="fetch/xhr"
-                        )
-
-        print("\n========== EXECUTION SUMMARY ==========")
-
-        # =================================================
-        # DOMAINS
-        # =================================================
-        print("\n--- DOMAINS ---")
-        print(f"[DOMAINS] total_discovered: {len(all_domains)}")
-        print(f"[DOMAINS] dns_resolved: {len(domains_dns_resolved)}")
-
-        # =================================================
-        # EMAILS (UNIQUE)
-        # =================================================
-        emails_scraping_total = emails_scraping_dom | emails_scraping_json
-        emails_baseline = emails_html | emails_crawler | emails_js
-        emails_all_sources = emails_baseline | emails_scraping_total
-
-        print("\n--- EMAILS (UNIQUE) ---")
-        print(f"[EMAILS] passive_html_unique: {len(emails_html)}")
-        print(f"[EMAILS] crawler_html_unique: {len(emails_crawler)}")
-        print(f"[EMAILS] js_static_unique: {len(emails_js)}")
-        print(f"[EMAILS] scraping_dom_unique: {len(emails_scraping_dom)}")
-        print(f"[EMAILS] scraping_json_unique: {len(emails_scraping_json)}")
-        print(f"[EMAILS] scraping_total_unique: {len(emails_scraping_total)}")
-        print(f"[EMAILS] new_from_scraping: {len(emails_scraping_total - emails_baseline)}")
-        print(f"[EMAILS] total_unique_all_sources: {len(emails_all_sources)}")
-
-        # =================================================
-        # CREDENTIALS (UNIQUE)
-        # =================================================
-        creds_scraping_total = creds_scraping_dom | creds_scraping_json
-        creds_baseline = creds_html | creds_js
-        creds_all_sources = creds_baseline | creds_scraping_total
-
-        print("\n--- CREDENTIALS (UNIQUE) ---")
-        print(f"[CREDS] crawler_html_unique: {len(creds_html)}")
-        print(f"[CREDS] js_static_unique: {len(creds_js)}")
-        print(f"[CREDS] scraping_dom_unique: {len(creds_scraping_dom)}")
-        print(f"[CREDS] scraping_json_unique: {len(creds_scraping_json)}")
-        print(f"[CREDS] scraping_total_unique: {len(creds_scraping_total)}")
-        print(f"[CREDS] new_from_scraping: {len(creds_scraping_total - creds_baseline)}")
-        print(f"[CREDS] total_unique_all_sources: {len(creds_all_sources)}")
-
-        # =================================================
-        # CRAWLING
-        # =================================================
-        print("\n--- CRAWLING ---")
-        print(f"[CRAWLER] live_pages_visited: {len(live_results)}")
-        print(f"[CRAWLER] wayback_pages_visited: {len(wayback_results)}")
-        print(f"[CRAWLER] wayback_urls_collected: {len(wayback_urls)}")
-
-        # =================================================
-        # JAVASCRIPT
-        # =================================================
-        print("\n--- JAVASCRIPT ---")
-        print(f"[JS] scripts_parsed_ok: {parsed_scripts}")
-        print(f"[JS] scripts_parse_limit: {max_scripts}")
-
-        # =================================================
-        # SCRAPING
-        # =================================================
-        print("\n--- SCRAPING ---")
-        print(f"[SCRAPING] urls_attempted: {scrape_urls_attempted}")
-        print(f"[SCRAPING] urls_succeeded: {scrape_urls_succeeded}")
-        print(f"[SCRAPING] urls_failed: {scrape_urls_failed}")
-
-        print("\n========== END SUMMARY ==========\n")
+            self._run_scraping(
+                execution,
+                live_results,
+                seen_emails,
+                seen_creds,
+                stats
+            )
 
         self.database.insert_metrics(execution.ID)
+
+        metrics = self.database.get_execution_metrics(execution.ID)
+        self._print_summary(metrics, stats)
+
