@@ -27,9 +27,9 @@ class Orchestrator:
         print("\n========== SUMARY ==========")
         self._print_db_metrics(metrics)
         self._print_execution_stats(stats)
-        print("\n========== END SUMARY ==========")
+        print("========== END SUMARY ==========")
     def _print_db_metrics(self, metrics):
-        print("\n========== DB METRICS ==========")
+        print("========== DB METRICS ==========")
 
         print("\n--- EMAILS ---")
         print(f"[EMAILS] total: {metrics.get('emails_total', 0)}")
@@ -63,7 +63,7 @@ class Orchestrator:
         print(f"[SCRAPING] succeeded: {stats.scrape_succeeded}")
         print(f"[SCRAPING] failed: {stats.scrape_failed}")
 
-        print("\n========== END STATS ==========\n")
+        print("\n========== END STATS ==========")
 
     # -------------------------------------------------
     # Utils - Validations
