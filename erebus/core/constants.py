@@ -18,6 +18,9 @@ TECHNIQUE_SCRAPING_JSON = "scraping_json"
 TECHNIQUE_WHOIS = "whois"
 TECHNIQUE_SUBDOMAINS = "subdomains_crtsh"
 TECHNIQUE_DNS = "dns_resolver"
+TECHNIQUE_DNS_MX = "dns_mx"
+TECHNIQUE_DNS_TXT = "dns_txt"
+
 
 # ---------------------------------------------
 # Execution status

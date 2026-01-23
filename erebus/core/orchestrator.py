@@ -1,6 +1,8 @@
 from urllib.parse import urlparse
 
 from collectors.passive.dns import DNSCollector
+from collectors.passive.DNS_Details.DNS_MX_Collector import DNS_MX_Collector
+from collectors.passive.DNS_Details.DNS_TXT_Collector import DNS_TXT_Collector
 from collectors.passive.subdomains import SubdomainCollector
 from collectors.passive.whoisCollector import WhoisCollector
 from collectors.passive.emails import EmailCollector
@@ -27,6 +29,7 @@ class Orchestrator:
         print("\n========== SUMARY ==========")
         self._print_db_metrics(metrics)
         self._print_execution_stats(stats)
+        self._print_mail_DNS_info()
         print("========== END SUMARY ==========")
     def _print_db_metrics(self, metrics):
         print("========== DB METRICS ==========")
@@ -64,7 +67,15 @@ class Orchestrator:
         print(f"[SCRAPING] failed: {stats.scrape_failed}")
 
         print("\n========== END STATS ==========")
-
+    def _print_mail_DNS_info(self):
+        mail = self.database.get_dns_mail_summary()
+        if mail:
+            print("\n========== DNS MAIL ==========")
+            print(f"[MAIL] domain: {mail['domain']}")
+            print(f"[MAIL] provider: {mail['mail_provider']}")
+            print(f"[MAIL] SPF policy: {mail['spf_policy']}")
+            print(f"[MAIL] external services: {', '.join(mail['external_services'])}")
+            print("========== END DNS MAIL ==========")
     # -------------------------------------------------
     # Utils - Validations
     # -------------------------------------------------
@@ -122,7 +133,14 @@ class Orchestrator:
 
         self.whois_collector = WhoisCollector()
 
+        #DNS
         self.dns_collector = DNSCollector(
+            timeout=cfg["timeouts"]["dns_resolution"]
+        )
+        self.dns_mx_collector = DNS_MX_Collector(
+            timeout=cfg["timeouts"]["dns_resolution"]
+        )
+        self.dns_txt_collector = DNS_TXT_Collector(
             timeout=cfg["timeouts"]["dns_resolution"]
         )
 
@@ -184,6 +202,77 @@ class Orchestrator:
         seen.add(domain)
         return True
 
+    # -----------------------------
+    # Utils - Helpers
+    # -----------------------------
+    def _detect_mail_provider(self, mx_hosts):
+        if any("google.com" in mx for mx in mx_hosts):
+            return "Google"
+        if any("outlook.com" in mx or "protection.outlook.com" in mx for mx in mx_hosts):
+            return "Microsoft"
+        if mx_hosts:
+            return "Custom / On-prem"
+        return None
+    def _analyze_spf(self, txt_records):
+        for txt in txt_records:
+            if txt.startswith("v=spf1"):
+                if "-all" in txt:
+                    return "strict"
+                if "~all" in txt:
+                    return "permissive"
+                if "+all" in txt:
+                    return "open"
+                return "neutral"
+        return None
+    def _extract_external_services(self, txt_records):
+        services = set()
+
+        for txt in txt_records:
+            if not txt.startswith("v=spf1"):
+                continue
+
+            if "include:_spf.google.com" in txt:
+                services.add("Google")
+            if "include:spf.protection.outlook.com" in txt:
+                services.add("Microsoft")
+
+        return sorted(services)
+    def _calculate_base_domain_dns_context(self, execution, base_domain):
+        print(f"[DNS] Analizando MX/TXT del dominio base: {base_domain}")
+
+        # -------------------------
+        # MX
+        # -------------------------
+        mx_results = self.dns_mx_collector.collect(base_domain)
+        mx_hosts = sorted({
+            r["record"].lower()
+            for r in mx_results
+            if r.get("record")
+        })
+
+        mail_provider = self._detect_mail_provider(mx_hosts)
+
+        # -------------------------
+        # TXT / SPF
+        # -------------------------
+        txt_results = self.dns_txt_collector.collect(base_domain)
+        txt_records = [
+            r["value"].lower()
+            for r in txt_results
+            if r.get("value")
+        ]
+
+        spf_policy = self._analyze_spf(txt_records)
+        external_services = self._extract_external_services(txt_records)
+
+        self.database.update_domain_dns_context(
+            execution.ID,
+            base_domain,
+            mx_records=", ".join(mx_hosts) if mx_hosts else None,
+            mail_provider=mail_provider,
+            spf_policy=spf_policy,
+            external_services=", ".join(external_services) if external_services else None
+        )
 
     # -------------------------------------------------
     # Main
@@ -209,6 +298,12 @@ class Orchestrator:
     def _run_dns(self, execution, cfg, all_domains):
         print("Resolviendo DNS...")
 
+        base_domain = execution.TARGET
+
+        # DNS contextual del dominio base
+        self._calculate_base_domain_dns_context(execution, base_domain)
+
+        # 2. Resolución IPs
         max_dns = int(cfg["limits"]["dns_max_domains"])
         domains_to_resolve = list(all_domains)[:max_dns]
 
@@ -239,6 +334,7 @@ class Orchestrator:
                     clean_domain,
                     C.DOMAIN_STATUS_NOT_RESOLVABLE
                 )
+
     def _run_whois(self, execution):
         print("Consultando WHOIS...")
         whois_data = self.whois_collector.collect(execution.TARGET)

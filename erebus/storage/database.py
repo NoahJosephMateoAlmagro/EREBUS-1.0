@@ -46,6 +46,11 @@ class Database:
             domain TEXT,
             source TEXT,
             status TEXT,
+            mx_records TEXT,
+            mail_provider TEXT,
+            spf_policy TEXT,
+            external_services TEXT,
+        
             UNIQUE (execution_id, domain)
         )
         """)
@@ -221,6 +226,55 @@ class Database:
             WHERE execution_id = ? AND domain = ?
         """, (status, execution_id, domain))
         self.conn.commit()
+    def update_domain_dns_context(self, execution_id, domain, mx_records=None, mail_provider=None, spf_policy=None, external_services=None):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE domain_results
+            SET
+                mx_records = ?,
+                mail_provider = ?,
+                spf_policy = ?,
+                external_services = ?
+            WHERE execution_id = ? AND domain = ?
+        """, (
+            mx_records,
+            mail_provider,
+            spf_policy,
+            external_services,
+            execution_id,
+            domain
+        ))
+        self.conn.commit()
+    def get_dns_mail_summary(self):
+        cursor = self.conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                domain,
+                mx_records,
+                mail_provider,
+                spf_policy,
+                external_services
+            FROM domain_results
+            WHERE mx_records IS NOT NULL
+            LIMIT 1
+        """)
+
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "domain": row[0],
+            "mx_records": row[1],
+            "mail_provider": row[2],
+            "spf_policy": row[3],
+            "external_services": (
+                row[4].split(", ") if row[4] else []
+            )
+        }
+
     def insert_resolved_domain(self, execution_id, domain, ip, source):
         cursor = self.conn.cursor()
         cursor.execute("""
