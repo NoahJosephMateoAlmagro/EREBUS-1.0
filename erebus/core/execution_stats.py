@@ -10,3 +10,9 @@ class ExecutionStats:
         self.scrape_attempted = 0
         self.scrape_succeeded = 0
         self.scrape_failed = 0
+
+        # CRAWLER
+        self.visited_from_robots = 0
+        self.visited_from_sitemap = 0
+        self.visited_discovered = 0
+        self.visited_from_base = 0

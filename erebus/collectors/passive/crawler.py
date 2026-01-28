@@ -13,12 +13,13 @@ EMAIL_REGEX = re.compile(
 
 class Crawler:
 
-    def __init__(self, start_url: Union[str, List[str]], max_pages : int = 30, timeout: int = 8, allowed_domain = None):
+    def __init__(self, start_url: Union[str, List[str]], max_pages: int = 30, timeout: int = 8, allowed_domain=None, sources: dict | None = None):
         self.max_pages = max_pages
         self.timeout = timeout
         self.visited = set()
         self.queue = []
         self.allowed_domain = allowed_domain
+        self.sources = sources or {}
 
         if isinstance(start_url, list):
             self.queue.extend(start_url)
@@ -60,6 +61,7 @@ class Crawler:
 
         while self.queue and len(self.visited) < self.max_pages:
             url = self._normalize(self.queue.pop(0))
+            origin = self.sources.get(url, "discovered")
 
             if url in self.visited:
                 continue
@@ -78,7 +80,8 @@ class Crawler:
                         "emails": list(page_emails),
                         "links": [],
                         "scripts": [],
-                        "raw_html": ""
+                        "raw_html": "",
+                        "origin": origin
                     })
 
                 continue
@@ -92,6 +95,14 @@ class Crawler:
 
                 if "text/html" not in response.headers.get("Content-Type", ""):
                     continue
+
+                #-------------------------------------------------------------------
+                if origin == "sitemap":
+                    print(f"[CRAWLER][SITEMAP] Analizando página: {url}")
+                elif origin == "robots":
+                    print(f"[CRAWLER][ROBOTS] Analizando página: {url}")
+                #-------------------------------------------------------------------
+
 
                 self.visited.add(url)
 
@@ -116,8 +127,13 @@ class Crawler:
 
                     if self._is_internal(full_url):
                         links.add(full_url)
+
                         if full_url not in self.visited:
                             self.queue.append(full_url)
+
+                            # heredar origen si no existe ( #Las urls derivadas de sitemap se cuentan como sitemap)
+                            if full_url not in self.sources:
+                                self.sources[full_url] = origin
 
                 scripts = set()
                 for s in soup.find_all("script", src=True):
@@ -132,7 +148,8 @@ class Crawler:
                     "emails": list(page_emails),
                     "links": list(links),
                     "scripts": list(scripts),
-                    "raw_html": response.text
+                    "raw_html": response.text,
+                    "origin": origin
                 })
 
             except Exception as e:

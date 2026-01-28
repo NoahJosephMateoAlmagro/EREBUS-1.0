@@ -30,6 +30,8 @@ def build_config_from_ui():
             "wayback_max_snapshots": wayback_max_snapshots_var.get(),
             "wayback_min_year": wayback_min_year_var.get(),
             "js_max_scripts": js_max_scripts_var.get(),
+            "sitemap_max_urls": sitemap_max_urls_var.get(),
+            "robots_max_urls": robots_max_urls_var.get(),
         },
         "timeouts": {
             "http_passive_email": http_email_var.get(),
@@ -41,6 +43,8 @@ def build_config_from_ui():
             "js_read": js_read_var.get(),
             "scraping_page_load": scraping_timeout_var.get(),
             "wayback_cdx_api": wayback_cdx_timeout_var.get(),
+            "http_robots": http_robots_timeout_var.get(),
+            "http_sitemap": http_sitemap_timeout_var.get(),
         }
     }
 
@@ -82,8 +86,18 @@ def run_erebus():
 
 def on_crawler_toggle():
     state = "normal" if crawler_var.get() else "disabled"
+
     js_check.config(state=state)
     scraping_check.config(state=state)
+
+    # 🆕 robots / sitemap entries
+    for widget in (
+            http_robots_timeout_entry,
+            http_sitemap_timeout_entry,
+            sitemap_max_urls_entry,
+            robots_max_urls_entry,
+    ):
+        widget.config(state=state)
 
     if not crawler_var.get():
         js_var.set(False)
@@ -98,7 +112,9 @@ def row_label(text, r):
 def row_check(text, r, var):
     tk.Checkbutton(options, text=text, variable=var).grid(row=r, column=0, sticky="w")
 def row_entry(r, c, var, w=6, padx=6):
-    tk.Entry(options, width=w, textvariable=var).grid(row=r, column=c, padx=padx)
+    e = tk.Entry(options, width=w, textvariable=var)
+    e.grid(row=r, column=c, padx=padx)
+    return e
 def row_hint(text, r, c=2):
     tk.Label(options, text=text).grid(row=r, column=c, sticky="w")
 
@@ -136,6 +152,8 @@ js_connect_var = tk.IntVar(value=APP_CONFIG["timeouts"]["js_connect"])
 js_read_var = tk.IntVar(value=APP_CONFIG["timeouts"]["js_read"])
 scraping_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["scraping_page_load"])
 wayback_cdx_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["wayback_cdx_api"])
+http_robots_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["http_robots"])
+http_sitemap_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["http_sitemap"])
 
 # --- LIMIT VARS ---
 dns_max_domains_var = tk.IntVar(value=APP_CONFIG["limits"]["dns_max_domains"])
@@ -144,7 +162,8 @@ crawler_wayback_max_pages_var = tk.IntVar(value=APP_CONFIG["limits"]["crawler_wa
 wayback_max_snapshots_var = tk.IntVar(value=APP_CONFIG["limits"]["wayback_max_snapshots"])
 wayback_min_year_var = tk.IntVar(value=APP_CONFIG["limits"]["wayback_min_year"])
 js_max_scripts_var = tk.IntVar(value=APP_CONFIG["limits"]["js_max_scripts"])
-
+sitemap_max_urls_var = tk.IntVar(value=APP_CONFIG["limits"]["sitemap_max_urls"])
+robots_max_urls_var = tk.IntVar(value=APP_CONFIG["limits"].get("robots_max_urls", 30))
 
 r = 0
 
@@ -194,6 +213,24 @@ row_hint("max pages:", r, 3)
 row_entry(r, 4, crawler_live_max_pages_var, w=6)
 r += 1
 
+# --- ROBOTS & SITEMAP ---
+tk.Label(options, text="robots.txt / sitemap", font=("Segoe UI", 8, "italic"))\
+    .grid(row=r, column=0, sticky="w", pady=(4, 2))
+r += 1
+
+row_hint("robots timeout (s):", r, 0)
+http_robots_timeout_entry = row_entry(r, 1, http_robots_timeout_var, w=4)
+
+row_hint("sitemap timeout (s):", r, 2)
+http_sitemap_timeout_entry = row_entry(r, 3, http_sitemap_timeout_var, w=4)
+
+row_hint("max sitemap URLs:", r, 4)
+sitemap_max_urls_entry   = row_entry(r, 5, sitemap_max_urls_var, w=6)
+
+row_hint("max robots URLs:", r, 6)
+robots_max_urls_entry = row_entry(r, 7, robots_max_urls_var, w=6)
+
+r += 1
 
 # =========================
 # WAYBACK

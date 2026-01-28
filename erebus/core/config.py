@@ -23,6 +23,8 @@ APP_CONFIG = {
         # Crawling
         "crawler_live_max_pages": 300,
         "crawler_wayback_max_pages": 30,
+        "sitemap_max_urls": 20,
+        "robots_max_urls": 20,
 
         # Wayback (CDX)
         "wayback_max_snapshots": 50,
@@ -41,8 +43,11 @@ APP_CONFIG = {
         "dns_resolution": 5,
 
         # Crawler (requests)
+
         "crawler_live_page": 3,
         "crawler_wayback_page": 8,
+        "http_robots": 5,
+        "http_sitemap": 8,
 
         # JS
         "js_connect": 3,

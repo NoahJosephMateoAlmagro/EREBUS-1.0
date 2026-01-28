@@ -11,6 +11,8 @@ from collectors.passive.js_parser import JSParser
 from collectors.passive.credential_parser import CredentialParser
 from collectors.active.scraper import Scraper
 from normalizers.email_normalizer import normalize_email
+from collectors.passive.robots import RobotsCollector
+from collectors.passive.sitemap import SitemapCollector
 
 from collectors.passive.waybackMachine import WaybackCollector
 
@@ -30,6 +32,7 @@ class Orchestrator:
         self._print_db_metrics(metrics)
         self._print_execution_stats(stats)
         self._print_mail_DNS_info()
+
         print("========== END SUMARY ==========")
     def _print_db_metrics(self, metrics):
         print("========== DB METRICS ==========")
@@ -53,8 +56,13 @@ class Orchestrator:
 
         print("\n========== EXECUTION STATS ==========")
 
-        print("\n--- CRAWLER ---")
+        print("\n--- CRAWLER (LIVE) ---")
         print(f"[CRAWLER] live pages visited: {stats.live_pages_visited}")
+        print(f"[CRAWLER] visited from robots.txt: {stats.visited_from_robots}")
+        print(f"[CRAWLER] visited from sitemap.xml (y las derivadas de las mismas): {stats.visited_from_sitemap}")
+        print(f"[CRAWLER] visited discovered (links): {stats.visited_discovered}")
+
+        print("\n--- CRAWLER (WAYBACK) ---")
         print(f"[CRAWLER] wayback urls collected: {stats.wayback_urls_collected}")
         print(f"[CRAWLER] wayback pages visited: {stats.wayback_pages_visited}")
 
@@ -76,6 +84,8 @@ class Orchestrator:
             print(f"[MAIL] SPF policy: {mail['spf_policy']}")
             print(f"[MAIL] external services: {', '.join(mail['external_services'])}")
             print("========== END DNS MAIL ==========")
+
+
     # -------------------------------------------------
     # Utils - Validations
     # -------------------------------------------------
@@ -103,6 +113,7 @@ class Orchestrator:
 
         return value
     def _build_crawl_urls(self, domain: str):
+        print("Creando urls para crawl...")
         return [
             f"https://{domain}",
             f"https://www.{domain}",
@@ -146,6 +157,17 @@ class Orchestrator:
 
         self.email_collector = EmailCollector(
             timeout=cfg["timeouts"]["http_passive_email"]
+        )
+
+        #Robots y sitemaps
+
+        self.robots_collector = RobotsCollector(
+            timeout=cfg["timeouts"]["http_robots"]
+        )
+
+        self.sitemap_collector = SitemapCollector(
+            timeout=cfg["timeouts"]["http_sitemap"],
+            max_urls=int(cfg["limits"]["sitemap_max_urls"])
         )
 
         # Crawler (LIVE / WAYBACK separados)
@@ -334,7 +356,6 @@ class Orchestrator:
                     clean_domain,
                     C.DOMAIN_STATUS_NOT_RESOLVABLE
                 )
-
     def _run_whois(self, execution):
         print("Consultando WHOIS...")
         whois_data = self.whois_collector.collect(execution.TARGET)
@@ -363,27 +384,56 @@ class Orchestrator:
                     context=r["context"]
                 )
     def _run_crawler(self, execution, cfg, stats):
-        print("Buscando emails mediante crawler (live + wayback)...")
 
         wayback_results = []
 
         # -------------------------
         # LIVE CRAWLER
         # -------------------------
-        live_urls = list(self._build_crawl_urls(execution.TARGET))
+        crawl_urls = set()
+        sources = {}  # url -> base | robots | sitemap
+
+        # Base domain seeds
+        for u in self._build_crawl_urls(execution.TARGET):
+            crawl_urls.add(u)
+            sources[u] = "base"
+
+        # Robots + sitemap
+        self._run_robots_and_sitemap(
+            execution,
+            cfg,
+            crawl_urls,
+            sources,
+            stats
+        )
 
         crawler_live = self.crawler_cls(
-            start_url=live_urls,
+            start_url=list(crawl_urls),
             max_pages=self.crawler_live_max_pages,
             timeout=self.crawler_live_timeout,
-            allowed_domain=execution.TARGET
+            allowed_domain=execution.TARGET,
+            sources=sources
         )
+
+        print("Buscando emails mediante crawler (live + wayback)...")
 
         live_results = crawler_live.run()
         stats.live_pages_visited = len(live_results)
 
+        # Contadores de páginas LIVE visitadas por origen
+        stats.visited_from_robots = 0
+        stats.visited_from_sitemap = 0
+        stats.visited_discovered = 0
+
         for page in live_results:
-            page["origin"] = "live"
+            origin = page.get("origin", "discovered")
+
+            if origin == "robots":
+                stats.visited_from_robots += 1
+            elif origin == "sitemap":
+                stats.visited_from_sitemap += 1
+            else:
+                stats.visited_discovered += 1
 
         # -------------------------
         # WAYBACK CRAWLER
@@ -395,7 +445,7 @@ class Orchestrator:
 
             if wayback_urls:
                 crawler_wb = self.crawler_cls(
-                    start_url = list(wayback_urls),
+                    start_url=list(wayback_urls),
                     max_pages=self.crawler_wayback_max_pages,
                     timeout=self.crawler_wayback_timeout,
                     allowed_domain=None
@@ -408,12 +458,57 @@ class Orchestrator:
                     page["origin"] = "wayback"
 
         return live_results, wayback_results
+
+    def _run_robots_and_sitemap(self, execution, cfg, urls, sources, stats):
+        print("Analizando robots.txt y sitemap.xml...")
+
+        robots = self.robots_collector.collect(execution.TARGET)
+        max_robots = int(cfg["limits"].get("robots_max_urls", 0))
+        robots_added = 0
+
+        for path in robots.get("paths", []):
+            if max_robots and robots_added >= max_robots:
+                break
+
+            if "*" in path or "$" in path:
+                continue
+
+            url = f"https://{execution.TARGET}{path}"
+            if url not in sources:
+                urls.add(url)
+            sources[url] = "robots"
+            robots_added += 1
+
+        print(f"[ROBOTS] URLs añadidas: {robots_added}")
+
+        # Sitemaps
+        sitemaps = robots.get("sitemaps", [])
+        sitemap_urls_added = 0
+        max_sitemap_urls = self.sitemap_collector.max_urls
+
+        for sitemap_url in sitemaps:
+            if sitemap_urls_added >= max_sitemap_urls:
+                break
+
+            sitemap_urls = self.sitemap_collector.collect(sitemap_url)
+
+            for u in sitemap_urls:
+                if sitemap_urls_added >= max_sitemap_urls:
+                    break
+
+                if u not in sources:
+                    urls.add(u)
+                    sources[u] = "sitemap"
+                    sitemap_urls_added += 1
+
+        print(f"[ROBOTS] Sitemaps detectados: {sitemaps}")
+        print(f"[SITEMAP] URLs añadidas: {sitemap_urls_added}")
     def _process_crawl_results(self,execution,crawl_results,seen_emails,seen_creds):
 
         for page in crawl_results:
             page_url = page["url"]
             domain = urlparse(page_url).netloc
-            origin = page.get("origin", "unknown")
+            origin = page.get("origin", "discovered")
 
             self.database.insert_crawler_result(
                 execution.ID,
@@ -502,7 +597,7 @@ class Orchestrator:
                                 urlparse(script_url).netloc,
                                 technique=C.TECHNIQUE_JS_STATIC,
                                 source=script_url,
-                                context="live"
+                                context=" "
                             )
 
                 # Credenciales JS
@@ -518,7 +613,7 @@ class Orchestrator:
                             value,
                             technique=C.TECHNIQUE_JS_STATIC,
                             source=script_url,
-                            context="live"
+                            context=" "
                         )
     def _run_scraping(self, execution, live_results, seen_emails, seen_creds, stats):
         print("Realizando scraping activo (solo live)...")
@@ -547,7 +642,7 @@ class Orchestrator:
                         urlparse(page["url"]).hostname,
                         technique=C.TECHNIQUE_SCRAPING_DOM,
                         source=page["url"],
-                        context="rendered_dom"
+                        context=" "
                     )
 
             for ctype, value, source in result["credentials_dom"]:
@@ -558,7 +653,7 @@ class Orchestrator:
                         value,
                         technique=C.TECHNIQUE_SCRAPING_DOM,
                         source=page["url"],
-                        context="rendered"
+                        context=" "
                     )
 
             for e in result["emails_json"]:
@@ -570,7 +665,7 @@ class Orchestrator:
                         urlparse(page["url"]).netloc,
                         technique=C.TECHNIQUE_SCRAPING_JSON,
                         source=page["url"],
-                        context="fetch/xhr"
+                        context=" "
                     )
 
             for ctype, value, source in result["credentials_json"]:
@@ -581,7 +676,7 @@ class Orchestrator:
                         value,
                         technique=C.TECHNIQUE_SCRAPING_JSON,
                         source=page["url"],
-                        context="fetch/xhr"
+                        context=" "
                     )
 
 
