@@ -20,7 +20,8 @@ TECHNIQUE_SUBDOMAINS = "subdomains_crtsh"
 TECHNIQUE_DNS = "dns_resolver"
 TECHNIQUE_DNS_MX = "dns_mx"
 TECHNIQUE_DNS_TXT = "dns_txt"
-
+TECHNIQUE_DNS_NS ="dns_ns"
+TECHNIQUE_DNS_CNAME = "dns_cname"
 
 # ---------------------------------------------
 # Execution status

@@ -18,6 +18,7 @@ APP_CONFIG = {
 
     "limits": {
         # DNS
+        "subdomain_max": 20,
         "dns_max_domains": 20,
 
         # Crawling

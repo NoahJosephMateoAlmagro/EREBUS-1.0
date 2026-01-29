@@ -3,6 +3,8 @@ from urllib.parse import urlparse
 from collectors.passive.dns import DNSCollector
 from collectors.passive.DNS_Details.DNS_MX_Collector import DNS_MX_Collector
 from collectors.passive.DNS_Details.DNS_TXT_Collector import DNS_TXT_Collector
+from collectors.passive.DNS_Details.DNS_CNAME_Collector import DNS_CNAME_Collector
+from collectors.passive.DNS_Details.DNS_NS_Collector import DNS_NS_Collector
 from collectors.passive.subdomains import SubdomainCollector
 from collectors.passive.whoisCollector import WhoisCollector
 from collectors.passive.emails import EmailCollector
@@ -34,6 +36,7 @@ class Orchestrator:
         self._print_mail_DNS_info()
 
         print("========== END SUMARY ==========")
+
     def _print_db_metrics(self, metrics):
         print("========== DB METRICS ==========")
 
@@ -139,7 +142,8 @@ class Orchestrator:
 
         # Pasivos
         self.subdomain_collector = SubdomainCollector(
-            timeout=cfg["timeouts"]["http_subdomains"]
+            timeout=cfg["timeouts"]["http_subdomains"],
+            limit = cfg["limits"]["subdomain_max"]
         )
 
         self.whois_collector = WhoisCollector()
@@ -152,6 +156,14 @@ class Orchestrator:
             timeout=cfg["timeouts"]["dns_resolution"]
         )
         self.dns_txt_collector = DNS_TXT_Collector(
+            timeout=cfg["timeouts"]["dns_resolution"]
+        )
+
+        self.dns_cname_collector = DNS_CNAME_Collector(
+            timeout=cfg["timeouts"]["dns_resolution"]
+        )
+
+        self.dns_ns_collector = DNS_NS_Collector(
             timeout=cfg["timeouts"]["dns_resolution"]
         )
 
@@ -260,7 +272,9 @@ class Orchestrator:
                 services.add("Microsoft")
 
         return sorted(services)
+
     def _calculate_base_domain_dns_context(self, execution, base_domain):
+
         print(f"[DNS] Analizando MX/TXT del dominio base: {base_domain}")
 
         # -------------------------
@@ -297,13 +311,14 @@ class Orchestrator:
             external_services=", ".join(external_services) if external_services else None
         )
 
+
     # -------------------------------------------------
     # Main
     # -------------------------------------------------
 
     def _run_subdomains(self, execution, all_domains, seen_domains):
         print("Encontrando subdominios...")
-        subdomains = self.subdomain_collector.collect(execution.TARGET)
+        subdomains = self.subdomain_collector.collect(execution.TARGET, )
 
         for s in subdomains:
             domain = self._is_valid_domain(s.get("value"))
@@ -326,7 +341,7 @@ class Orchestrator:
         # DNS contextual del dominio base
         self._calculate_base_domain_dns_context(execution, base_domain)
 
-        # 2. Resolución IPs
+        # Resolución IPs
         max_dns = int(cfg["limits"]["dns_max_domains"])
         domains_to_resolve = list(all_domains)[:max_dns]
 
@@ -335,6 +350,14 @@ class Orchestrator:
             if not clean_domain:
                 continue
 
+            # ---------------------
+            # DNS DETAILS
+            # ---------------------
+            self._run_dns_observations_for_domain(execution, clean_domain)
+
+            # ----------------------
+            # RESOLUCIÓN A IP
+            # ---------------------
             dns_results = self.dns_collector.collect(clean_domain)
 
             if dns_results:
@@ -357,6 +380,44 @@ class Orchestrator:
                     clean_domain,
                     C.DOMAIN_STATUS_NOT_RESOLVABLE
                 )
+    def _run_dns_observations_for_domain(self, execution, domain):
+        """
+        Guarda dataset DNS OSINT (CNAME, NS, etc)
+        para un dominio concreto.
+        """
+        print(f"[DNS-OBS] Analizando {domain}")
+        # ---------------------
+        # CNAME
+        # ---------------------
+        cname_results = self.dns_cname_collector.collect(domain)
+
+        for r in cname_results:
+            self.database.insert_dns_observation(
+                execution.ID,
+                r["domain"],
+                r["type"],
+                r["record"],
+                source="dns_resolver",
+                technique=C.TECHNIQUE_DNS_CNAME
+            )
+
+        # ---------------------
+        # NS
+        # ---------------------
+        ns_results = self.dns_ns_collector.collect(domain)
+
+        for r in ns_results:
+            self.database.insert_dns_observation(
+                execution.ID,
+                r["domain"],
+                r["type"],
+                r["record"],
+                source="dns_resolver",
+                technique=C.TECHNIQUE_DNS_NS
+            )
+
+
+
     def _run_whois(self, execution):
         print("Consultando WHOIS...")
         whois_data = self.whois_collector.collect(execution.TARGET)

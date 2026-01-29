@@ -24,6 +24,7 @@ def build_config_from_ui():
             "wayback": wayback_var.get(),
         },
         "limits": {
+            "subdomain_max": max_subdomains_var.get(),
             "dns_max_domains": dns_max_domains_var.get(),
             "crawler_live_max_pages": crawler_live_max_pages_var.get(),
             "crawler_wayback_max_pages": crawler_wayback_max_pages_var.get(),
@@ -157,6 +158,7 @@ http_robots_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["http_robots"])
 http_sitemap_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["http_sitemap"])
 
 # --- LIMIT VARS ---
+max_subdomains_var = tk.IntVar(value=APP_CONFIG["limits"]["subdomain_max"])
 dns_max_domains_var = tk.IntVar(value=APP_CONFIG["limits"]["dns_max_domains"])
 crawler_live_max_pages_var = tk.IntVar(value=APP_CONFIG["limits"]["crawler_live_max_pages"])
 crawler_wayback_max_pages_var = tk.IntVar(value=APP_CONFIG["limits"]["crawler_wayback_max_pages"])
@@ -174,8 +176,11 @@ r = 0
 row_label("Básico", r); r += 1
 
 row_check("Subdominios (crt.sh)", r, subdomains_var)
+r += 1
 row_hint("timeout (s):", r, 1)
 row_entry(r, 2, http_subdomains_var, w=4)
+row_hint("limit:", r, 3)
+row_entry(r, 4, max_subdomains_var, w=5)
 r += 1
 
 row_check("WHOIS", r, whois_var)

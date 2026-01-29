@@ -4,10 +4,12 @@ import core.constants as C
 
 class SubdomainCollector(PassiveCollector):
 
-    def __init__(self, timeout : int = 8):
+    def __init__(self, timeout : int = 8, limit: int=20):
         self.timeout = timeout
+        self.limit = limit
 
     def collect(self, target: str):
+        print(self.limit)
         results = []
 
         try:
@@ -30,6 +32,9 @@ class SubdomainCollector(PassiveCollector):
                         subdomains.add(domain)
 
             for sub in sorted(subdomains):
+                if len(results) - 1>= self.limit:
+                    break
+
                 results.append({
                     "value": sub,
                     "source": C.TECHNIQUE_SUBDOMAINS

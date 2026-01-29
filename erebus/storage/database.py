@@ -69,6 +69,18 @@ class Database:
         )
         """)
 
+        cursor.execute("""CREATE TABLE IF NOT EXISTS dns_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            domain TEXT,
+            record_type TEXT,
+            record_value TEXT,
+            source TEXT,
+            technique TEXT,
+            UNIQUE(execution_id, domain, record_type, record_value)
+        )
+        """)
+
         # ------------------------
         # WHOIS
         # ------------------------
@@ -168,6 +180,7 @@ class Database:
         cursor.execute("DELETE FROM executions")
         cursor.execute("DELETE FROM domain_results")
         cursor.execute("DELETE FROM resolved_domain_results")
+        cursor.execute("DELETE FROM dns_observations")
         cursor.execute("DELETE FROM whois_results")
         cursor.execute("DELETE FROM email_results")
         cursor.execute("DELETE FROM crawler_results")
@@ -283,7 +296,29 @@ class Database:
         VALUES (?, ?, ?, ?)
         """, (execution_id, domain, ip, source))
         self.conn.commit()
+    def insert_dns_observation(self, execution_id, domain, record_type, record_value,source=None, technique=None):
+        cursor = self.conn.cursor()
 
+        cursor.execute("""
+            INSERT OR IGNORE INTO dns_observations (
+                execution_id,
+                domain,
+                record_type,
+                record_value,
+                source,
+                technique
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            domain.lower(),
+            record_type.upper(),
+            record_value.lower(),
+            source,
+            technique
+        ))
+
+        self.conn.commit()
     # -------------------------------------------------
     # WHOIS
     # -------------------------------------------------
