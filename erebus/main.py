@@ -32,6 +32,7 @@ def build_config_from_ui():
             "js_max_scripts": js_max_scripts_var.get(),
             "sitemap_max_urls": sitemap_max_urls_var.get(),
             "robots_max_urls": robots_max_urls_var.get(),
+            "cdx_url_limit": cdx_url_limit_var.get(),
         },
         "timeouts": {
             "http_passive_email": http_email_var.get(),
@@ -163,8 +164,8 @@ wayback_max_snapshots_var = tk.IntVar(value=APP_CONFIG["limits"]["wayback_max_sn
 wayback_min_year_var = tk.IntVar(value=APP_CONFIG["limits"]["wayback_min_year"])
 js_max_scripts_var = tk.IntVar(value=APP_CONFIG["limits"]["js_max_scripts"])
 sitemap_max_urls_var = tk.IntVar(value=APP_CONFIG["limits"]["sitemap_max_urls"])
-robots_max_urls_var = tk.IntVar(value=APP_CONFIG["limits"].get("robots_max_urls", 30))
-
+robots_max_urls_var = tk.IntVar(value=APP_CONFIG["limits"]["robots_max_urls"])
+cdx_url_limit_var = tk.IntVar(value=APP_CONFIG["limits"]["cdx_url_limit"])
 r = 0
 
 # =========================
@@ -259,6 +260,9 @@ row_entry(r, 3, crawler_wayback_timeout_var, w=4)
 
 tk.Label(options, text="max pages:").grid(row=r, column=4, sticky="w")
 row_entry(r, 5, crawler_wayback_max_pages_var, w=6)
+
+tk.Label(options, text="max url cdx:").grid(row=r, column=6, sticky="w")
+row_entry(r, 7, cdx_url_limit_var, w=6)
 r += 1
 
 

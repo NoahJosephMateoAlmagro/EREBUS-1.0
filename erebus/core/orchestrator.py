@@ -195,8 +195,9 @@ class Orchestrator:
         # Wayback (CDX)
         self.wayback_collector = WaybackCollector(
             timeout=cfg["timeouts"]["wayback_cdx_api"],
-            limit=cfg["limits"]["wayback_max_snapshots"],
-            min_year=cfg["limits"]["wayback_min_year"]
+            limit=int(cfg["limits"]["wayback_max_snapshots"]),
+            cdx_limit=int(cfg["limits"]["cdx_url_limit"]),
+            min_year=int(cfg["limits"]["wayback_min_year"])
         )
 
     # -----------------------------
@@ -445,7 +446,7 @@ class Orchestrator:
 
             if wayback_urls:
                 crawler_wb = self.crawler_cls(
-                    start_url=list(wayback_urls),
+                    start_url=[u["url"] for u in wayback_urls],
                     max_pages=self.crawler_wayback_max_pages,
                     timeout=self.crawler_wayback_timeout,
                     allowed_domain=None

@@ -21,7 +21,7 @@ APP_CONFIG = {
         "dns_max_domains": 20,
 
         # Crawling
-        "crawler_live_max_pages": 300,
+        "crawler_live_max_pages": 100,
         "crawler_wayback_max_pages": 30,
         "sitemap_max_urls": 20,
         "robots_max_urls": 20,
@@ -29,6 +29,7 @@ APP_CONFIG = {
         # Wayback (CDX)
         "wayback_max_snapshots": 50,
         "wayback_min_year": 2008,
+        "cdx_url_limit":2000,
 
         # JS
         "js_max_scripts": 15,
@@ -57,6 +58,6 @@ APP_CONFIG = {
         "scraping_page_load": 15000,  # ms
 
         # Wayback API (CDX)
-        "wayback_cdx_api": 10
+        "wayback_cdx_api": 25
     }
 }
