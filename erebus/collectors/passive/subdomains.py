@@ -9,7 +9,6 @@ class SubdomainCollector(PassiveCollector):
         self.limit = limit
 
     def collect(self, target: str):
-        print(self.limit)
         results = []
 
         try:
