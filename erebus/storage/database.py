@@ -1,4 +1,5 @@
 from pathlib import Path
+import core.constants as C
 import sqlite3
 
 class Database:
@@ -69,14 +70,27 @@ class Database:
         )
         """)
 
-        cursor.execute("""CREATE TABLE IF NOT EXISTS dns_observations (
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dns_observations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            -- Contexto de ejecución
             execution_id TEXT,
             domain TEXT,
-            record_type TEXT,
-            record_value TEXT,
+
+            -- Observación DNS
+            record_type TEXT,        -- NS | CNAME
+            record_value TEXT,       -- target normalizado
+
+            -- Origen
             source TEXT,
             technique TEXT,
+
+            -- Enriquecimiento OSINT
+            provider TEXT,           -- AWS | Azure | Cloudflare | Unknown
+            target_resolvable INTEGER,  -- 1 | 0 | NULL
+            exposure_level TEXT,     -- NONE | LOW | MEDIUM | HIGH
+
             UNIQUE(execution_id, domain, record_type, record_value)
         )
         """)
@@ -296,9 +310,9 @@ class Database:
         VALUES (?, ?, ?, ?)
         """, (execution_id, domain, ip, source))
         self.conn.commit()
-    def insert_dns_observation(self, execution_id, domain, record_type, record_value,source=None, technique=None):
-        cursor = self.conn.cursor()
 
+    def insert_dns_observation(self,execution_id,domain, record_type, record_value, source=None, technique=None, provider=None, target_resolvable=None, exposure_level=None):
+        cursor = self.conn.cursor()
         cursor.execute("""
             INSERT OR IGNORE INTO dns_observations (
                 execution_id,
@@ -306,19 +320,52 @@ class Database:
                 record_type,
                 record_value,
                 source,
-                technique
+                technique,
+                provider,
+                target_resolvable,
+                exposure_level
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             execution_id,
             domain.lower(),
             record_type.upper(),
             record_value.lower(),
             source,
-            technique
+            technique,
+            provider,
+            (
+                1 if target_resolvable is True
+                else 0 if target_resolvable is False
+                else None
+            ),
+            exposure_level
         ))
-
         self.conn.commit()
+    def get_domain_resolution_status(self, execution_id: str, domain: str) -> bool | None:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT 1
+            FROM resolved_domain_results
+            WHERE domain = ?
+            LIMIT 1
+        """, (domain.lower(),)) # COMA PARA QUE NO ITERE (LO TRATA COMO UNA TUPLA DE UN ELEMENTO (NO COMO UN STRING)
+        if cursor.fetchone():
+            return True
+
+        cursor.execute("""
+            SELECT status
+            FROM domain_results
+            WHERE domain = ?
+            LIMIT 1
+        """, ( domain.lower(),))
+
+        row = cursor.fetchone()
+        if row and row[0] == C.DOMAIN_STATUS_NOT_RESOLVABLE:
+            return False
+
+        return None  # Nunca intentado
+
     # -------------------------------------------------
     # WHOIS
     # -------------------------------------------------

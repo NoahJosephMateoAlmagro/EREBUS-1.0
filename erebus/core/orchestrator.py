@@ -15,7 +15,7 @@ from collectors.active.scraper import Scraper
 from normalizers.email_normalizer import normalize_email
 from collectors.passive.robots import RobotsCollector
 from collectors.passive.sitemap import SitemapCollector
-
+from collectors.passive.DNS_Details.DNS_Details_Analyzer import DNS_Details_Analyzer
 from collectors.passive.waybackMachine import WaybackCollector
 
 import core.constants as C
@@ -55,6 +55,7 @@ class Orchestrator:
         print(f"[CREDS] creds_detected_without_scraping: {metrics.get('creds_detected_without_scraping', 0)}")
 
         print("\n========== END METRICS ==========\n")
+
     def _print_execution_stats (self, stats: ExecutionStats):
 
         print("\n========== EXECUTION STATS ==========")
@@ -78,6 +79,7 @@ class Orchestrator:
         print(f"[SCRAPING] failed: {stats.scrape_failed}")
 
         print("\n========== END STATS ==========")
+
     def _print_mail_DNS_info(self):
         mail = self.database.get_dns_mail_summary()
         if mail:
@@ -240,39 +242,6 @@ class Orchestrator:
     # -----------------------------
     # Utils - Helpers
     # -----------------------------
-    def _detect_mail_provider(self, mx_hosts):
-        if any("google.com" in mx for mx in mx_hosts):
-            return "Google"
-        if any("outlook.com" in mx or "protection.outlook.com" in mx for mx in mx_hosts):
-            return "Microsoft"
-        if mx_hosts:
-            return "Custom / On-prem"
-        return None
-    def _analyze_spf(self, txt_records):
-        for txt in txt_records:
-            if txt.startswith("v=spf1"):
-                if "-all" in txt:
-                    return "strict"
-                if "~all" in txt:
-                    return "permissive"
-                if "+all" in txt:
-                    return "open"
-                return "neutral"
-        return None
-    def _extract_external_services(self, txt_records):
-        services = set()
-
-        for txt in txt_records:
-            if not txt.startswith("v=spf1"):
-                continue
-
-            if "include:_spf.google.com" in txt:
-                services.add("Google")
-            if "include:spf.protection.outlook.com" in txt:
-                services.add("Microsoft")
-
-        return sorted(services)
-
     def _calculate_base_domain_dns_context(self, execution, base_domain):
 
         print(f"[DNS] Analizando MX/TXT del dominio base: {base_domain}")
@@ -287,10 +256,8 @@ class Orchestrator:
             if r.get("record")
         })
 
-        mail_provider = self._detect_mail_provider(mx_hosts)
-
         # -------------------------
-        # TXT / SPF
+        # TXT
         # -------------------------
         txt_results = self.dns_txt_collector.collect(base_domain)
         txt_records = [
@@ -299,18 +266,29 @@ class Orchestrator:
             if r.get("value")
         ]
 
-        spf_policy = self._analyze_spf(txt_records)
-        external_services = self._extract_external_services(txt_records)
+        # -------------------------
+        # ANALYSIS (Analyzer)
+        # -------------------------
+        dns_context = DNS_Details_Analyzer.analyze_mail_dns_context(
+            mx_hosts=mx_hosts,
+            txt_records=txt_records
+        )
 
+        # -------------------------
+        # PERSISTENCE
+        # -------------------------
         self.database.update_domain_dns_context(
             execution.ID,
             base_domain,
             mx_records=", ".join(mx_hosts) if mx_hosts else None,
-            mail_provider=mail_provider,
-            spf_policy=spf_policy,
-            external_services=", ".join(external_services) if external_services else None
+            mail_provider=dns_context["mail_provider"],
+            spf_policy=dns_context["spf_policy"],
+            external_services=(
+                ", ".join(dns_context["external_services"])
+                if dns_context["external_services"]
+                else None
+            )
         )
-
 
     # -------------------------------------------------
     # Main
@@ -350,11 +328,6 @@ class Orchestrator:
             if not clean_domain:
                 continue
 
-            # ---------------------
-            # DNS DETAILS
-            # ---------------------
-            self._run_dns_observations_for_domain(execution, clean_domain)
-
             # ----------------------
             # RESOLUCIÓN A IP
             # ---------------------
@@ -380,25 +353,82 @@ class Orchestrator:
                     clean_domain,
                     C.DOMAIN_STATUS_NOT_RESOLVABLE
                 )
+
+            # ---------------------
+            # DNS DETAILS
+            # ---------------------
+            self._run_dns_observations_for_domain(execution, clean_domain)
     def _run_dns_observations_for_domain(self, execution, domain):
-        """
-        Guarda dataset DNS OSINT (CNAME, NS, etc)
-        para un dominio concreto.
-        """
         print(f"[DNS-OBS] Analizando {domain}")
+
         # ---------------------
         # CNAME
         # ---------------------
         cname_results = self.dns_cname_collector.collect(domain)
 
         for r in cname_results:
+            record_value = (r.get("record") or "").strip().lower()
+            if record_value.endswith("."):
+                record_value = record_value[:-1]
+            if not record_value:
+                continue
+
+            provider = DNS_Details_Analyzer.detect_provider_from_record(
+                record_value,
+                "CNAME"
+            )
+
+            target_resolvable = self.database.get_domain_resolution_status(
+                execution.ID,
+                record_value
+            )
+
+            if target_resolvable is None:
+                # Resolver bajo demanda (por si no se ha recogido de la fase de recolección dicho subdominio, entonces devuelve none)
+                dns_results = self.dns_collector.collect(record_value)
+
+                if dns_results:
+                    self.database.insert_domain(
+                        execution.ID,
+                        record_value,
+                        source=C.TECHNIQUE_DNS_CNAME,
+                        status=C.DOMAIN_STATUS_RESOLVABLE
+                    )
+
+                    for r in dns_results:
+                        self.database.insert_resolved_domain(
+                            execution.ID,
+                            r["domain"],
+                            r["ip"],
+                            r["source"]
+                        )
+
+                    target_resolvable = True
+                else:
+                    self.database.insert_domain(
+                        execution.ID,
+                        record_value,
+                        source=C.TECHNIQUE_DNS_CNAME,
+                        status=C.DOMAIN_STATUS_NOT_RESOLVABLE
+                    )
+                    target_resolvable = False
+
+            exposure_level = DNS_Details_Analyzer.calculate_exposure_level(
+                record_type="CNAME",
+                provider=provider,
+                target_resolvable=target_resolvable
+            )
+
             self.database.insert_dns_observation(
                 execution.ID,
-                r["domain"],
-                r["type"],
-                r["record"],
+                domain,
+                "CNAME",
+                record_value,
                 source="dns_resolver",
-                technique=C.TECHNIQUE_DNS_CNAME
+                technique=C.TECHNIQUE_DNS_CNAME,
+                provider=provider,
+                target_resolvable=target_resolvable,
+                exposure_level=exposure_level
             )
 
         # ---------------------
@@ -407,16 +437,34 @@ class Orchestrator:
         ns_results = self.dns_ns_collector.collect(domain)
 
         for r in ns_results:
-            self.database.insert_dns_observation(
-                execution.ID,
-                r["domain"],
-                r["type"],
-                r["record"],
-                source="dns_resolver",
-                technique=C.TECHNIQUE_DNS_NS
+            record_value = (r.get("record") or "").strip().lower()
+            if record_value.endswith("."):
+                record_value = record_value[:-1]
+            if not record_value:
+                continue
+
+            provider = DNS_Details_Analyzer.detect_provider_from_record(
+                record_value,
+                "NS"
             )
 
+            exposure_level = DNS_Details_Analyzer.calculate_exposure_level(
+                record_type="NS",
+                provider=provider,
+                target_resolvable=None
+            )
 
+            self.database.insert_dns_observation(
+                execution.ID,
+                domain,
+                "NS",
+                record_value,
+                source="dns_resolver",
+                technique=C.TECHNIQUE_DNS_NS,
+                provider=provider,
+                target_resolvable=None,
+                exposure_level=exposure_level
+            )
 
     def _run_whois(self, execution):
         print("Consultando WHOIS...")
