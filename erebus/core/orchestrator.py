@@ -17,6 +17,7 @@ from collectors.passive.robots import RobotsCollector
 from collectors.passive.sitemap import SitemapCollector
 from collectors.passive.DNS_Details.DNS_Details_Analyzer import DNS_Details_Analyzer
 from collectors.passive.waybackMachine import WaybackCollector
+from collectors.passive.security_headers import SecurityHeadersCollector
 
 import core.constants as C
 from core.execution_stats import ExecutionStats
@@ -201,9 +202,14 @@ class Orchestrator:
         # Credenciales
         self.cred_parser = CredentialParser()
 
-        # Scraping
+        # Scraping (activo)
         self.scraper = Scraper(
             timeout=cfg["timeouts"]["scraping_page_load"]
+        )
+
+        #Cabeceras
+        self.security_headers_collector = SecurityHeadersCollector(
+            timeout=cfg["timeouts"]["http_security_headers"]
         )
 
         # Wayback (CDX)
@@ -358,6 +364,16 @@ class Orchestrator:
             # DNS DETAILS
             # ---------------------
             self._run_dns_observations_for_domain(execution, clean_domain)
+
+            # ---------------------
+            # CABECERAS
+            # ---------------------
+            print("[DEBUG] Después de DNS_OBS, antes de headers", clean_domain)
+
+            if cfg["modules"].get("security_headers"):
+                print("[DEBUG] Ejecutando security headers", clean_domain)
+                self._run_security_headers(execution, clean_domain)
+
     def _run_dns_observations_for_domain(self, execution, domain):
         print(f"[DNS-OBS] Analizando {domain}")
 
@@ -464,6 +480,42 @@ class Orchestrator:
                 provider=provider,
                 target_resolvable=None,
                 exposure_level=exposure_level
+            )
+
+    def _run_security_headers(self, execution, domain):
+        print("Ejecutando _run_security_headers")
+        urls = [
+            f"https://{domain}",
+            f"https://www.{domain}",
+            f"http://{domain}",
+            f"http://www.{domain}",
+        ]
+        result = None
+        used_url = None
+
+        for url in urls:
+            result = self.security_headers_collector.collect(url)
+            if result:
+                used_url = url
+                break
+
+        if not result:
+            return
+
+        for header, value in result.items():
+
+            if value:
+                status = "present"
+            else:
+                status = "missing"
+
+            self.database.insert_security_header(
+                execution.ID,
+                domain,
+                used_url,
+                header,
+                value,
+                status
             )
 
     def _run_whois(self, execution):

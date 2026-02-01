@@ -9,6 +9,7 @@ APP_CONFIG = {
         "subdomains": True,
         "whois": True,
         "dns": True,
+        "security_headers": True,
         "emails_passive": True,
         "crawler": True,
         "js_parsing": False,
@@ -40,6 +41,7 @@ APP_CONFIG = {
         # HTTP (requests)
         "http_passive_email": 20,
         "http_subdomains": 25,
+        "http_security_headers": 5,
 
         # DNS
         "dns_resolution": 5,

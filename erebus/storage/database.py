@@ -96,6 +96,22 @@ class Database:
         """)
 
         # ------------------------
+        # CABECERAS
+        # ------------------------
+        cursor.execute("""
+                CREATE TABLE IF NOT EXISTS security_headers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    execution_id TEXT,
+                    domain TEXT,
+                    url TEXT,
+                    header TEXT,
+                    value TEXT,
+                    status TEXT,          -- present | missing | weak
+                    UNIQUE(execution_id, domain, url, header)
+                )
+                """)
+
+        # ------------------------
         # WHOIS
         # ------------------------
         cursor.execute("""
@@ -201,6 +217,7 @@ class Database:
         cursor.execute("DELETE FROM js_results")
         cursor.execute("DELETE FROM credential_results")
         cursor.execute("DELETE FROM execution_metrics")
+        cursor.execute("DELETE FROM security_headers")
         self.conn.commit()
 
     # -------------------------------------------------
@@ -220,6 +237,7 @@ class Database:
             execution.STATUS
         ))
         self.conn.commit()
+
     def update_execution(self, execution):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -365,6 +383,31 @@ class Database:
             return False
 
         return None  # Nunca intentado
+
+    # -------------------------------------------------
+    # Cabeceras
+    # -------------------------------------------------
+    def insert_security_header(self,execution_id,domain, url, header, value, status):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO security_headers (
+                execution_id,
+                domain,
+                url,
+                header,
+                value,
+                status
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            domain,
+            url,
+            header,
+            value,
+            status
+        ))
+        self.conn.commit()
 
     # -------------------------------------------------
     # WHOIS

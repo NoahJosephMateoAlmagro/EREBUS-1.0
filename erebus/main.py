@@ -17,6 +17,7 @@ def build_config_from_ui():
             "subdomains": subdomains_var.get(),
             "whois": whois_var.get(),
             "dns": dns_var.get(),
+            "security_headers": security_headers_var.get(),
             "emails_passive": emails_var.get(),
             "crawler": crawler_var.get(),
             "js_parsing": js_var.get(),
@@ -39,6 +40,7 @@ def build_config_from_ui():
             "http_passive_email": http_email_var.get(),
             "http_subdomains": http_subdomains_var.get(),
             "dns_resolution": dns_timeout_var.get(),
+            "http_security_headers": http_security_headers_var.get(),
             "crawler_live_page": crawler_live_timeout_var.get(),
             "crawler_wayback_page": crawler_wayback_timeout_var.get(),
             "js_connect": js_connect_var.get(),
@@ -105,7 +107,12 @@ def on_crawler_toggle():
         js_var.set(False)
         scraping_var.set(False)
         wayback_var.set(False)
+def on_dns_toggle():
+    state = "normal" if dns_var.get() else "disabled"
+    security_headers_check.config(state=state)
 
+    if not dns_var.get():
+        security_headers_var.set(False)
 # ----------------------------
 # UI Layout helpers
 # ----------------------------
@@ -138,6 +145,7 @@ options.pack(anchor="w", pady=6)
 subdomains_var = tk.BooleanVar(value=True)
 whois_var = tk.BooleanVar(value=True)
 dns_var = tk.BooleanVar(value=True)
+security_headers_var = tk.BooleanVar(value=True)
 emails_var = tk.BooleanVar(value=True)
 crawler_var = tk.BooleanVar(value=True)
 js_var = tk.BooleanVar(value=False)
@@ -156,6 +164,7 @@ scraping_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["scraping_page_loa
 wayback_cdx_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["wayback_cdx_api"])
 http_robots_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["http_robots"])
 http_sitemap_timeout_var = tk.IntVar(value=APP_CONFIG["timeouts"]["http_sitemap"])
+http_security_headers_var = tk.IntVar(value=APP_CONFIG["timeouts"]["http_security_headers"])
 
 # --- LIMIT VARS ---
 max_subdomains_var = tk.IntVar(value=APP_CONFIG["limits"]["subdomain_max"])
@@ -186,11 +195,21 @@ r += 1
 row_check("WHOIS", r, whois_var)
 r += 1
 
-row_check("DNS", r, dns_var)
+tk.Checkbutton(
+    options,
+    text="DNS",
+    variable=dns_var,
+    command=on_dns_toggle
+).grid(row=r, column=0, sticky="w")
+
 row_hint("timeout (s):", r, 1)
 row_entry(r, 2, dns_timeout_var, w=4)
 row_hint("max:", r, 3)
 row_entry(r, 4, dns_max_domains_var, w=5)
+security_headers_check = tk.Checkbutton(options,text="Security Headers",variable=security_headers_var)
+security_headers_check.grid(row=r, column=6, sticky="w")
+row_entry(r, 8, http_security_headers_var, w=4)
+row_hint("timeout:", r, 7)
 r += 1
 
 row_check("Emails pasivos (HTML)", r, emails_var)
