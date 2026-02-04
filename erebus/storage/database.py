@@ -106,10 +106,27 @@ class Database:
                     url TEXT,
                     header TEXT,
                     value TEXT,
-                    status TEXT,          -- present | missing | weak
+                    status TEXT,          -- present | missing 
+                    exposure_level TEXT, -- Low/medium/high
+                    description TEXT,
                     UNIQUE(execution_id, domain, url, header)
                 )
                 """)
+
+        cursor.execute("""
+                       CREATE TABLE IF NOT EXISTS tech_headers (
+                           id INTEGER PRIMARY KEY AUTOINCREMENT,
+                           execution_id TEXT,
+                           domain TEXT,
+                           url TEXT,
+                           header TEXT,
+                           value TEXT,
+                           status TEXT,          -- present | missing 
+                           exposure_level TEXT, -- Low/medium/high
+                           description TEXT,
+                           UNIQUE(execution_id, domain, url, header)
+                       )
+                       """)
 
         # ------------------------
         # WHOIS
@@ -218,6 +235,7 @@ class Database:
         cursor.execute("DELETE FROM credential_results")
         cursor.execute("DELETE FROM execution_metrics")
         cursor.execute("DELETE FROM security_headers")
+        cursor.execute("DELETE FROM tech_headers")
         self.conn.commit()
 
     # -------------------------------------------------
@@ -387,7 +405,7 @@ class Database:
     # -------------------------------------------------
     # Cabeceras
     # -------------------------------------------------
-    def insert_security_header(self,execution_id,domain, url, header, value, status):
+    def insert_security_header(self,execution_id,domain, url, header, value, status, exposure_level, description):
         cursor = self.conn.cursor()
         cursor.execute("""
             INSERT INTO security_headers (
@@ -396,16 +414,45 @@ class Database:
                 url,
                 header,
                 value,
-                status
+                status, 
+                exposure_level,
+                description
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             execution_id,
             domain,
             url,
             header,
             value,
-            status
+            status,
+            exposure_level,
+            description
+        ))
+        self.conn.commit()
+    def insert_tech_header(self,execution_id,domain, url, header, value, status, exposure_level, description):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO tech_headers (
+                execution_id,
+                domain,
+                url,
+                header,
+                value,
+                status, 
+                exposure_level,
+                description
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            domain,
+            url,
+            header,
+            value,
+            status,
+            exposure_level,
+            description
         ))
         self.conn.commit()
 

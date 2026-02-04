@@ -18,6 +18,7 @@ from collectors.passive.sitemap import SitemapCollector
 from collectors.passive.DNS_Details.DNS_Details_Analyzer import DNS_Details_Analyzer
 from collectors.passive.waybackMachine import WaybackCollector
 from collectors.passive.security_headers import SecurityHeadersCollector
+from collectors.passive.headers_analyzer import HeadersAnalyzer
 
 import core.constants as C
 from core.execution_stats import ExecutionStats
@@ -502,20 +503,31 @@ class Orchestrator:
         if not result:
             return
 
-        for header, value in result.items():
+        security_analysis = HeadersAnalyzer.analyze_security(result)
+        tech_analysis = HeadersAnalyzer.analyze_tech(result)
 
-            if value:
-                status = "present"
-            else:
-                status = "missing"
-
+        for h in security_analysis:
             self.database.insert_security_header(
                 execution.ID,
                 domain,
                 used_url,
-                header,
-                value,
-                status
+                h["header"],
+                h["value"],
+                h["status"],
+                exposure_level=h["exposure_level"],
+                description=h["description"]
+            )
+
+        for h in tech_analysis:
+            self.database.insert_tech_header(
+                execution.ID,
+                domain,
+                used_url,
+                h["header"],
+                h["value"],
+                h["status"],
+                exposure_level=h["exposure_level"],
+                description=h["description"]
             )
 
     def _run_whois(self, execution):
