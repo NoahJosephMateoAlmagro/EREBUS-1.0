@@ -25,7 +25,9 @@ class JSParser:
     def parse(self, script_url: str, base_domain: str) -> dict | None:
 
         try:
-            if self._is_external(script_url, base_domain):
+            is_wayback = "web.archive.org" in script_url
+
+            if not is_wayback and self._is_external(script_url, base_domain):
                 return None
 
             r = requests.get(

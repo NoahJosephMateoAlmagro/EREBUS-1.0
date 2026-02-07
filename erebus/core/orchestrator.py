@@ -297,6 +297,20 @@ class Orchestrator:
             )
         )
 
+    def _extract_base_domain_for_js(self, page_url: str):
+        if "web.archive.org" in page_url:
+            try:
+                original = page_url.split("/web/", 1)[1]
+                original_url = original.split("/", 1)[1]
+                return urlparse(original_url).netloc
+            except Exception:
+                return None
+        return urlparse(page_url).netloc
+
+        # En wayback se devuelve algo como https://web.archive.org/web/20180101010101/https://example.com/path/page.html,
+        # este helper sirrve para que si viene de ahí coja example.com
+
+
     # -------------------------------------------------
     # Main
     # -------------------------------------------------
@@ -724,14 +738,12 @@ class Orchestrator:
                         context=origin
                     )
     def _run_js_parsing(self, execution, cfg, live_results, seen_emails, seen_creds, stats):
-        print("Parseando JS (solo live)...")
+        print("Parseando JS (live + wayback)...")
 
         stats.scripts_parse_limit = int(cfg["limits"]["js_max_scripts"])
 
         if not live_results:
             print("[JS] No hay páginas LIVE, se omite parsing JS")
-
-        base_domain = urlparse(live_results[0]["url"]).netloc
 
         for page in live_results:
             if stats.scripts_parsed_ok >= stats.scripts_parse_limit:
@@ -739,6 +751,28 @@ class Orchestrator:
 
             if "@" in page["url"]:
                 continue
+
+            origin = page.get("origin")
+
+            technique = (
+                C.TECHNIQUE_JS_STATIC_WAYBACK
+                if origin == "wayback"
+                else C.TECHNIQUE_JS_STATIC
+            )
+
+            base_domain = self._extract_base_domain_for_js(page["url"])
+            if not base_domain:
+                continue
+
+            scripts = page.get("scripts", []) or []
+
+            print(
+                f"[DEBUG][JS] page_url={page['url']} | "
+                f"origin={origin} | "
+                f"base_domain={base_domain} | "
+                f"scripts_found={len(scripts)}"
+            )
+
 
             for script_url in page.get("scripts", []):
                 if stats.scripts_parsed_ok >= stats.scripts_parse_limit:
@@ -769,7 +803,7 @@ class Orchestrator:
                                 execution.ID,
                                 email,
                                 urlparse(script_url).netloc,
-                                technique=C.TECHNIQUE_JS_STATIC,
+                                technique=technique,
                                 source=script_url,
                                 context=" "
                             )
@@ -785,7 +819,7 @@ class Orchestrator:
                             execution.ID,
                             ctype,
                             value,
-                            technique=C.TECHNIQUE_JS_STATIC,
+                            technique=technique,
                             source=script_url,
                             context=" "
                         )
@@ -872,7 +906,7 @@ class Orchestrator:
         all_domains.add(execution.TARGET)
 
         live_results = []
-
+        wayback_results = []
 
         # -------------------------------------------------
         # 1. Subdominios (pasivo)
@@ -906,6 +940,7 @@ class Orchestrator:
         # 5. Crawling HTML (LIVE + WAYBACK)
         # -------------------------------------------------
 
+
         if cfg["modules"]["crawler"]:
             live_results, wayback_results = self._run_crawler(execution, cfg, stats)
 
@@ -916,14 +951,18 @@ class Orchestrator:
                 seen_creds)
 
         # -------------------------------------------------
-        # 6. Parsing JS (SOLO LIVE)
+        # 6. Parsing JS
         # -------------------------------------------------
 
         if cfg["modules"]["js_parsing"]:
+
+            print(f"[DEBUG] LIVE pages: {len(live_results)}")
+            print(f"[DEBUG] WAYBACK pages: {len(wayback_results)}")
+
             self._run_js_parsing(
                 execution,
                 cfg,
-                live_results,
+                live_results + wayback_results,
                 seen_emails,
                 seen_creds, stats)
 
