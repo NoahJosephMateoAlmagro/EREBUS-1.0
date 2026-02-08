@@ -19,6 +19,11 @@ from collectors.passive.DNS_Details.DNS_Details_Analyzer import DNS_Details_Anal
 from collectors.passive.waybackMachine import WaybackCollector
 from collectors.passive.security_headers import SecurityHeadersCollector
 from collectors.passive.headers_analyzer import HeadersAnalyzer
+from collectors.passive.file_parser.file_parser import FileParser
+from collectors.passive.file_parser.txt_parser import TxtParser
+from collectors.passive.file_parser.pdf_parser import PdfParser
+from collectors.passive.file_parser.xml_parser import XmlParser
+from normalizers.email_normalizer import extract_emails_from_text
 
 import core.constants as C
 from core.execution_stats import ExecutionStats
@@ -199,6 +204,18 @@ class Orchestrator:
             connect_timeout=cfg["timeouts"]["js_connect"],
             read_timeout=cfg["timeouts"]["js_read"]
         )
+
+        # File parser (archivos descargables)
+        self.file_parser = FileParser(
+            parsers=[
+                TxtParser(),
+                PdfParser(),
+                XmlParser()
+            ],
+            timeout=cfg["timeouts"].get("file_download"),
+            max_size=int(cfg["limits"].get("file_max_size"))
+        )
+
 
         # Credenciales
         self.cred_parser = CredentialParser()
@@ -823,6 +840,56 @@ class Orchestrator:
                             source=script_url,
                             context=" "
                         )
+
+    def _run_file_parsing(self, execution, crawl_results, seen_emails, seen_creds, stats):
+        print("Parseando archivos descargables...")
+
+        for page in crawl_results:
+            origin = page.get("origin", "discovered")
+
+            for url in page.get("links", []):
+                print(f"[FILE] probando link: {url}")
+                result = self.file_parser.parse(url)
+
+                if not result:
+                    continue
+
+                text = result["text"]
+                technique = result["technique"]
+
+                print(
+                    f"[FILE] OK | technique={technique} | "
+                    f"text_len={len(text)}"
+                )
+
+                # Emails en archivos
+                emails = extract_emails_from_text(text)
+                for e in emails:
+                    email = normalize_email(e)
+                    if email and self._is_new_email(email, seen_emails):
+                        print(f"[FILE][EMAIL] {email}")
+                        self.database.insert_email(
+                            execution.ID,
+                            email,
+                            urlparse(url).netloc,
+                            technique=technique,
+                            source=url,
+                            context=origin
+                        )
+
+                # Credenciales en archivos
+                creds = self.cred_parser.parse(text, source=C.SOURCE_FILE)
+                for ctype, value, source in creds:
+                    if self._is_new_credential(ctype, value, seen_creds):
+                        self.database.insert_credential(
+                            execution.ID,
+                            ctype,
+                            value,
+                            technique=technique,
+                            source=url,
+                            context=origin
+                        )
+
     def _run_scraping(self, execution, live_results, seen_emails, seen_creds, stats):
         print("Realizando scraping activo (solo live)...")
 
@@ -967,7 +1034,20 @@ class Orchestrator:
                 seen_creds, stats)
 
         # -------------------------------------------------
-        # 7. Scraping activo (SOLO LIVE)
+        # 7. Parsing de archivos
+        # -------------------------------------------------
+
+        if cfg["modules"].get("file_parsing"):
+            self._run_file_parsing(
+                execution,
+                live_results + wayback_results,
+                seen_emails,
+                seen_creds,
+                stats
+            )
+
+        # -------------------------------------------------
+        # 8. Scraping activo (SOLO LIVE)
         # -------------------------------------------------
 
         if cfg["modules"]["scraping"]:

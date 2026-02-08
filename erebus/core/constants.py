@@ -23,7 +23,9 @@ TECHNIQUE_DNS_MX = "dns_mx"
 TECHNIQUE_DNS_TXT = "dns_txt"
 TECHNIQUE_DNS_NS ="dns_ns"
 TECHNIQUE_DNS_CNAME = "dns_cname"
-
+TECHNIQUE_FILE_TXT = "file_txt"
+TECHNIQUE_FILE_PDF = "file_pdf"
+TECHNIQUE_FILE_XML = "file_xml"
 # ---------------------------------------------
 # Execution status
 # ---------------------------------------------
@@ -39,5 +41,6 @@ SOURCE_HTML = "html"
 SOURCE_JS = "js"
 SOURCE_SCRAPING_DOM = "scraping_dom"
 SOURCE_SCRAPING_JSON = "scraping_json"
+SOURCE_FILE = "file"
 
 

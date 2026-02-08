@@ -13,6 +13,7 @@ APP_CONFIG = {
         "emails_passive": True,
         "crawler": True,
         "js_parsing": False,
+        "file_parsing": True,
         "scraping": False,
         "wayback": True
     },
@@ -35,6 +36,9 @@ APP_CONFIG = {
 
         # JS
         "js_max_scripts": 15,
+
+        #Files
+        "file_max_size": 5000000,
     },
 
     "timeouts": {
@@ -56,6 +60,9 @@ APP_CONFIG = {
         # JS
         "js_connect": 3,
         "js_read": 5,
+
+        #Files
+        "file_download": 10,
 
         # Active scraping (Playwright)
         "scraping_page_load": 15000,  # ms

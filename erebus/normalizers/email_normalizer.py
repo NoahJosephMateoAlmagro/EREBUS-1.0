@@ -88,3 +88,6 @@ def _decode_base64_email(token: str, found: set):
             found.add(e)
     except Exception:
         pass
+
+def extract_emails_from_text(text: str) -> set[str]: #Para la lectura de archivos
+    return normalize_obfuscated(text)

@@ -75,7 +75,14 @@ def run_erebus():
     db.insert_execution(execution)
 
     try:
-        cfg = build_config_from_ui()
+        cfg_ui = build_config_from_ui()
+
+        cfg = {
+            "modules": {**APP_CONFIG["modules"], **cfg_ui.get("modules", {})},
+            "limits": {**APP_CONFIG["limits"], **cfg_ui.get("limits", {})},
+            "timeouts": {**APP_CONFIG["timeouts"], **cfg_ui.get("timeouts", {})},
+        }
+
         orchestrator.run(execution, cfg)
         execution.finish()
 
