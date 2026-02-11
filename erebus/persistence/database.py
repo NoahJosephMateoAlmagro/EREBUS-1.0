@@ -1,0 +1,714 @@
+from pathlib import Path
+import shared.constants as C
+import sqlite3
+
+class Database:
+    def __init__(self):
+
+        APP_ROOT = Path(__file__).resolve().parents[1]  # erebus/
+        db_dir = APP_ROOT / "storage"
+        db_dir.mkdir(exist_ok=True)
+
+        self.db_path = db_dir / "erebus.db"
+        self.conn = sqlite3.connect(self.db_path)
+
+        print(f"[DB] Using database at: {self.db_path.resolve()}")
+
+        self.create_db()
+
+
+    # -------------------------------------------------
+    # Creación de tablas
+    # -------------------------------------------------
+
+    def create_db(self):
+        cursor = self.conn.cursor()
+
+        # ------------------------
+        # Ejecuciones
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS executions (
+            id TEXT PRIMARY KEY,
+            target TEXT,
+            start_time TEXT,
+            end_time TEXT,
+            status TEXT
+        )
+        """)
+
+        # ------------------------
+        # Dominios descubiertos
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS domain_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            domain TEXT,
+            source TEXT,
+            status TEXT,
+            mx_records TEXT,
+            mail_provider TEXT,
+            spf_policy TEXT,
+            external_services TEXT,
+        
+            UNIQUE (execution_id, domain)
+        )
+        """)
+
+        # ------------------------
+        # Dominios resueltos (DNS)
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS resolved_domain_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            domain TEXT,
+            ip TEXT,
+            source TEXT,
+            UNIQUE (execution_id, domain, ip)
+        )
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dns_observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            -- Contexto de ejecución
+            execution_id TEXT,
+            domain TEXT,
+
+            -- Observación DNS
+            record_type TEXT,        -- NS | CNAME
+            record_value TEXT,       -- target normalizado
+
+            -- Origen
+            source TEXT,
+            technique TEXT,
+
+            -- Enriquecimiento OSINT
+            provider TEXT,           -- AWS | Azure | Cloudflare | Unknown
+            target_resolvable INTEGER,  -- 1 | 0 | NULL
+            exposure_level TEXT,     -- NONE | LOW | MEDIUM | HIGH
+
+            UNIQUE(execution_id, domain, record_type, record_value)
+        )
+        """)
+
+        # ------------------------
+        # CABECERAS
+        # ------------------------
+        cursor.execute("""
+                CREATE TABLE IF NOT EXISTS security_headers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    execution_id TEXT,
+                    domain TEXT,
+                    url TEXT,
+                    header TEXT,
+                    value TEXT,
+                    status TEXT,          -- present | missing 
+                    exposure_level TEXT, -- Low/medium/high
+                    description TEXT,
+                    UNIQUE(execution_id, domain, url, header)
+                )
+                """)
+
+        cursor.execute("""
+                       CREATE TABLE IF NOT EXISTS tech_headers (
+                           id INTEGER PRIMARY KEY AUTOINCREMENT,
+                           execution_id TEXT,
+                           domain TEXT,
+                           url TEXT,
+                           header TEXT,
+                           value TEXT,
+                           status TEXT,          -- present | missing 
+                           exposure_level TEXT, -- Low/medium/high
+                           description TEXT,
+                           UNIQUE(execution_id, domain, url, header)
+                       )
+                       """)
+
+        # ------------------------
+        # WHOIS
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS whois_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            domain TEXT,
+            registrar TEXT,
+            creation_date TEXT,
+            expiration_date TEXT,
+            updated_date TEXT,
+            name_servers TEXT,
+            status TEXT,
+            emails TEXT,
+            raw_text TEXT
+        )
+        """)
+
+        # ------------------------
+        # Emails (UNIFICADOS)
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS email_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            email TEXT,
+            domain TEXT,
+            technique TEXT,
+            source TEXT,
+            context TEXT,
+            UNIQUE (execution_id, email)
+        )
+        """)
+
+        # ------------------------
+        # Resultados del crawler (debug / trazabilidad)
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS crawler_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            url TEXT,
+            emails TEXT,
+            links TEXT,
+            scripts TEXT
+        )
+        """)
+
+        # ------------------------
+        # Resultados JS (debug / trazabilidad)
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS js_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            script_url TEXT,
+            emails TEXT,
+            urls TEXT
+        )
+        """)
+
+        # ------------------------
+        # Credenciales expuestas
+        # ------------------------
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS credential_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            type TEXT,
+            value TEXT,
+            technique TEXT,
+            source TEXT,
+            context TEXT,
+            UNIQUE (execution_id, type, value)
+        )
+        """)
+
+        # ------------------------
+        # Métricas resumen
+        # ------------------------
+        cursor.execute("""CREATE TABLE IF NOT EXISTS execution_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            execution_id TEXT,
+            metric TEXT,       
+            value REAL
+        )""")
+
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # Limpieza completa (para pruebas)
+    # -------------------------------------------------
+
+    def clear_all(self):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM executions")
+        cursor.execute("DELETE FROM domain_results")
+        cursor.execute("DELETE FROM resolved_domain_results")
+        cursor.execute("DELETE FROM dns_observations")
+        cursor.execute("DELETE FROM whois_results")
+        cursor.execute("DELETE FROM email_results")
+        cursor.execute("DELETE FROM crawler_results")
+        cursor.execute("DELETE FROM js_results")
+        cursor.execute("DELETE FROM credential_results")
+        cursor.execute("DELETE FROM execution_metrics")
+        cursor.execute("DELETE FROM security_headers")
+        cursor.execute("DELETE FROM tech_headers")
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # Ejecuciones
+    # -------------------------------------------------
+
+    def insert_execution(self, execution):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT INTO executions (id, target, start_time, end_time, status)
+        VALUES (?, ?, ?, ?, ?)
+        """, (
+            execution.ID,
+            execution.TARGET,
+            execution.START.isoformat(),
+            execution.END.isoformat() if execution.END else None,
+            execution.STATUS
+        ))
+        self.conn.commit()
+
+    def update_execution(self, execution):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        UPDATE executions
+        SET end_time = ?, status = ?
+        WHERE id = ?
+        """, (
+            execution.END.isoformat() if execution.END else None,
+            execution.STATUS,
+            execution.ID
+        ))
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # Dominios
+    # -------------------------------------------------
+
+    def insert_domain(self, execution_id, domain, source, status):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO domain_results
+            (execution_id, domain, source, status)
+            VALUES (?, ?, ?, ?)
+        """, (execution_id, domain, source, status))
+        self.conn.commit()
+    def update_domain_status(self, execution_id, domain, status):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE domain_results
+            SET status = ?
+            WHERE execution_id = ? AND domain = ?
+        """, (status, execution_id, domain))
+        self.conn.commit()
+    def update_domain_dns_context(self, execution_id, domain, mx_records=None, mail_provider=None, spf_policy=None, external_services=None):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE domain_results
+            SET
+                mx_records = ?,
+                mail_provider = ?,
+                spf_policy = ?,
+                external_services = ?
+            WHERE execution_id = ? AND domain = ?
+        """, (
+            mx_records,
+            mail_provider,
+            spf_policy,
+            external_services,
+            execution_id,
+            domain
+        ))
+        self.conn.commit()
+    def get_dns_mail_summary(self):
+        cursor = self.conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                domain,
+                mx_records,
+                mail_provider,
+                spf_policy,
+                external_services
+            FROM domain_results
+            WHERE mx_records IS NOT NULL
+            LIMIT 1
+        """)
+
+        row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        return {
+            "domain": row[0],
+            "mx_records": row[1],
+            "mail_provider": row[2],
+            "spf_policy": row[3],
+            "external_services": (
+                row[4].split(", ") if row[4] else []
+            )
+        }
+
+    def insert_resolved_domain(self, execution_id, domain, ip, source):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT INTO resolved_domain_results
+        (execution_id, domain, ip, source)
+        VALUES (?, ?, ?, ?)
+        """, (execution_id, domain, ip, source))
+        self.conn.commit()
+
+    def insert_dns_observation(self,execution_id,domain, record_type, record_value, source=None, technique=None, provider=None, target_resolvable=None, exposure_level=None):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO dns_observations (
+                execution_id,
+                domain,
+                record_type,
+                record_value,
+                source,
+                technique,
+                provider,
+                target_resolvable,
+                exposure_level
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            domain.lower(),
+            record_type.upper(),
+            record_value.lower(),
+            source,
+            technique,
+            provider,
+            (
+                1 if target_resolvable is True
+                else 0 if target_resolvable is False
+                else None
+            ),
+            exposure_level
+        ))
+        self.conn.commit()
+    def get_domain_resolution_status(self, execution_id: str, domain: str) -> bool | None:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT 1
+            FROM resolved_domain_results
+            WHERE domain = ?
+            LIMIT 1
+        """, (domain.lower(),)) # COMA PARA QUE NO ITERE (LO TRATA COMO UNA TUPLA DE UN ELEMENTO (NO COMO UN STRING)
+        if cursor.fetchone():
+            return True
+
+        cursor.execute("""
+            SELECT status
+            FROM domain_results
+            WHERE domain = ?
+            LIMIT 1
+        """, ( domain.lower(),))
+
+        row = cursor.fetchone()
+        if row and row[0] == C.DOMAIN_STATUS_NOT_RESOLVABLE:
+            return False
+
+        return None  # Nunca intentado
+
+    # -------------------------------------------------
+    # Cabeceras
+    # -------------------------------------------------
+    def insert_security_header(self,execution_id,domain, url, header, value, status, exposure_level, description):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO security_headers (
+                execution_id,
+                domain,
+                url,
+                header,
+                value,
+                status, 
+                exposure_level,
+                description
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            domain,
+            url,
+            header,
+            value,
+            status,
+            exposure_level,
+            description
+        ))
+        self.conn.commit()
+    def insert_tech_header(self,execution_id,domain, url, header, value, status, exposure_level, description):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO tech_headers (
+                execution_id,
+                domain,
+                url,
+                header,
+                value,
+                status, 
+                exposure_level,
+                description
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            domain,
+            url,
+            header,
+            value,
+            status,
+            exposure_level,
+            description
+        ))
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # WHOIS
+    # -------------------------------------------------
+
+    def insert_whois_result(self, execution_id, domain, data):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT INTO whois_results (
+            execution_id,
+            domain,
+            registrar,
+            creation_date,
+            expiration_date,
+            updated_date,
+            name_servers,
+            status,
+            emails,
+            raw_text
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            domain,
+            data.get("registrar"),
+            data.get("creation_date"),
+            data.get("expiration_date"),
+            data.get("updated_date"),
+            self._list_to_str(data.get("name_servers")),
+            self._list_to_str(data.get("status")),
+            self._list_to_str(data.get("emails")),
+            data.get("raw_text")
+        ))
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # Emails
+    # -------------------------------------------------
+
+    def insert_email(self, execution_id, email, domain, technique, source, context):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT INTO email_results
+        (execution_id, email, domain, technique, source, context)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (execution_id, email, domain, technique, source, context))
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # Crawler / JS (debug)
+    # -------------------------------------------------
+
+    def insert_crawler_result(self, execution_id, url, emails, links, scripts):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT INTO crawler_results
+        (execution_id, url, emails, links, scripts)
+        VALUES (?, ?, ?, ?, ?)
+        """, (
+            execution_id,
+            url,
+            ",".join(emails),
+            ",".join(links),
+            ",".join(scripts)
+        ))
+        self.conn.commit()
+    def insert_js_result(self, execution_id, script_url, emails, urls):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT INTO js_results
+        (execution_id, script_url, emails, urls)
+        VALUES (?, ?, ?, ?)
+        """, (
+            execution_id,
+            script_url,
+            ",".join(emails),
+            ",".join(urls)
+        ))
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # Credenciales
+    # -------------------------------------------------
+
+    def insert_credential(self, execution_id, ctype, value, technique, source, context):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT INTO credential_results
+        (execution_id, type, value, technique, source, context)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (execution_id, ctype, value, technique, source, context))
+        self.conn.commit()
+
+    # -------------------------------------------------
+    # Métricas resumen
+    # -------------------------------------------------
+
+    def insert_metrics(self, execution_id: str):
+        cursor = self.conn.cursor()
+
+        # ======================
+        # EMAILS
+        # ======================
+
+        # Total emails
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_total', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+        """, (execution_id, execution_id))
+
+
+        # ======================
+        # EMAILS POR FUENTE
+        # ======================
+
+        # Emails from crawler (HTML)
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_crawler_html', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique = 'crawler_html'
+        """, (execution_id, execution_id))
+
+        # Emails from JS static parsing
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_js_static', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique = 'js_static'
+        """, (execution_id, execution_id))
+
+        # Emails from scraping DOM
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_scraping_dom', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique = 'scraping_dom'
+        """, (execution_id, execution_id))
+
+        # Emails from scraping JSON
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_scraping_json', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique = 'scraping_json'
+        """, (execution_id, execution_id))
+
+        # ======================
+        # COBERTURA SCRAPING
+        # ======================
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_detected_by_scraping', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_detected_without_scraping', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND technique NOT IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
+        # ======================
+        # LIVE vs WAYBACK
+        # ======================
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_from_live', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND context = 'live'
+        """, (execution_id, execution_id))
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'emails_from_wayback', COUNT(*)
+            FROM email_results
+            WHERE execution_id = ?
+              AND context = 'wayback'
+        """, (execution_id, execution_id))
+
+        # ======================
+        # CREDENCIALES
+        # ======================
+
+        # Total credenciales
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'creds_total', COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+        """, (execution_id, execution_id))
+
+        # Credenciales por técnica
+        for tech, count in cursor.execute("""
+            SELECT technique, COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+            GROUP BY technique
+        """, (execution_id,)):
+            cursor.execute("""
+                INSERT INTO execution_metrics (execution_id, metric, value)
+                VALUES (?, ?, ?)
+            """, (execution_id, f"creds_{tech}", count))
+
+        # Cobertura scraping en credenciales
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'creds_detected_by_scraping', COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+              AND technique IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
+        cursor.execute("""
+            INSERT INTO execution_metrics (execution_id, metric, value)
+            SELECT ?, 'creds_detected_without_scraping', COUNT(*)
+            FROM credential_results
+            WHERE execution_id = ?
+              AND technique NOT IN ('scraping_dom', 'scraping_json')
+        """, (execution_id, execution_id))
+
+
+        self.conn.commit()
+
+
+
+
+    def get_execution_metrics(self, execution_id):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT metric, value
+            FROM execution_metrics
+            WHERE execution_id = ?
+        """, (execution_id,))
+        return {row[0]: row[1] for row in cursor.fetchall()}
+    # -------------------------------------------------
+    # Helpers
+    # -------------------------------------------------
+    def _list_to_str(self, value):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return ", ".join(str(v) for v in value)
+        return str(value)

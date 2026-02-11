@@ -1,5 +1,5 @@
-from collectors.passive.waybackMachine import WaybackCollector
-from collectors.passive.crawler import Crawler
+from collectors.passive.waybackMachine_Collector import WaybackCollector
+from collectors.active.crawler import Crawler
 
 TARGET = "urjc.es"
 

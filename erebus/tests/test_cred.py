@@ -1,4 +1,4 @@
-from collectors.passive.js_parser import JSParser
+from processing.parsers.js_parser import JSParser
 
 parser = JSParser()
 
@@ -9,7 +9,7 @@ parsed = parser.parse(
 
 print(parsed)
 
-from collectors.passive.credential_parser import CredentialParser
+from processing.parsers.credential_parser import CredentialParser
 
 cred = CredentialParser()
 creds = cred.parse(parsed["raw"], source="js")

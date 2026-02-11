@@ -1,4 +1,4 @@
-from collectors.passive.js_parser import JSParser
+from processing.parsers.js_parser import JSParser
 
 parser = JSParser()
 

@@ -1,11 +1,10 @@
 import tkinter as tk
 from tkinter import messagebox
-import sys
 
 from core.exec import Execution
-from core.orchestrator import Orchestrator
-from storage.database import Database
-from core.config import APP_CONFIG
+from application.orchestrator import Orchestrator
+from persistence.database import Database
+from application.config import APP_CONFIG
 
 # ----------------------------
 # Build config from UI

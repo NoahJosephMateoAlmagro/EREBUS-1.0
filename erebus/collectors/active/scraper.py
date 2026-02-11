@@ -4,9 +4,9 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, TimeoutError
 from bs4 import BeautifulSoup
 
-from normalizers.email_normalizer import normalize_obfuscated
-from collectors.passive.credential_parser import CredentialParser
-import core.constants as C
+from processing.normalizers.email_normalizer import normalize_obfuscated
+from processing.parsers.credential_parser import CredentialParser
+import shared.constants as C
 
 
 class Scraper:

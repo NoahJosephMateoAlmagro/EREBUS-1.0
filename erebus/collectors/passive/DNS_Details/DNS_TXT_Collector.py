@@ -1,6 +1,6 @@
 import dns.resolver
-from collectors.passive.base import PassiveCollector
-import core.constants as C
+from collectors.base import PassiveCollector
+import shared.constants as C
 
 
 class DNS_TXT_Collector(PassiveCollector):
