@@ -38,6 +38,7 @@ class Scraper:
     # -------------------------------------------------
 
     def scrape(self, url: str):
+
         json_texts = []
         json_objects = []
 

@@ -17,7 +17,7 @@ from collectors.active.robots_Collector import RobotsCollector
 from collectors.active.sitemap_Collector import SitemapCollector
 from processing.analyzers.DNS_Details_Analyzer import DNS_Details_Analyzer
 from collectors.passive.waybackMachine_Collector import WaybackCollector
-from collectors.active.security_headers_Collector import SecurityHeadersCollector
+from collectors.active.http_headers_Collector import HttpHeadersCollector
 from processing.analyzers.headers_analyzer import HeadersAnalyzer
 from processing.parsers.file_parser.file_parser import FileParser
 from processing.parsers.file_parser.txt_parser import TxtParser
@@ -30,9 +30,8 @@ from application.execution_stats import ExecutionStats
 
 class Orchestrator:
 
-    def __init__(self, database):
-        self.database = database
-
+    def __init__(self, uow):
+        self.uow = uow
     # -------------------------------------------------
     # Utils - Prints
     # -------------------------------------------------
@@ -88,7 +87,7 @@ class Orchestrator:
         print("\n========== END STATS ==========")
 
     def _print_mail_DNS_info(self):
-        mail = self.database.get_dns_mail_summary()
+        mail = self.uow.domains.get_dns_mail_summary()
         if mail:
             print("\n========== DNS MAIL ==========")
             print(f"[MAIL] domain: {mail['domain']}")
@@ -226,8 +225,8 @@ class Orchestrator:
         )
 
         #Cabeceras
-        self.security_headers_collector = SecurityHeadersCollector(
-            timeout=cfg["timeouts"]["http_security_headers"]
+        self.http_headers_collector = HttpHeadersCollector(
+            timeout=cfg["timeouts"]["http_headers"]
         )
 
         # Wayback (CDX)
@@ -301,7 +300,7 @@ class Orchestrator:
         # -------------------------
         # PERSISTENCE
         # -------------------------
-        self.database.update_domain_dns_context(
+        self.uow.domains.update_domain_dns_context(
             execution.ID,
             base_domain,
             mx_records=", ".join(mx_hosts) if mx_hosts else None,
@@ -343,7 +342,7 @@ class Orchestrator:
 
         for domain in all_domains:
             if self._is_new_domain(domain, seen_domains):
-                self.database.insert_domain(
+                self.uow.domains.insert_domain(
                     execution.ID,
                     domain,
                     source=C.TECHNIQUE_SUBDOMAINS,
@@ -372,21 +371,21 @@ class Orchestrator:
             dns_results = self.dns_collector.collect(clean_domain)
 
             if dns_results:
-                self.database.update_domain_status(
+                self.uow.domains.update_domain_status(
                     execution.ID,
                     clean_domain,
                     C.DOMAIN_STATUS_RESOLVABLE
                 )
 
                 for r in dns_results:
-                    self.database.insert_resolved_domain(
+                    self.uow.domains.insert_resolved_domain(
                         execution.ID,
                         r["domain"],
                         r["ip"],
                         r["source"]
                     )
             else:
-                self.database.update_domain_status(
+                self.uow.domains.update_domain_status(
                     execution.ID,
                     clean_domain,
                     C.DOMAIN_STATUS_NOT_RESOLVABLE
@@ -402,9 +401,9 @@ class Orchestrator:
             # ---------------------
             print("[DEBUG] Después de DNS_OBS, antes de headers", clean_domain)
 
-            if cfg["modules"].get("security_headers"):
-                print("[DEBUG] Ejecutando security headers", clean_domain)
-                self._run_security_headers(execution, clean_domain)
+            if cfg["modules"].get("http_headers"):
+                print("[DEBUG] Ejecutando http headers", clean_domain)
+                self._run_http_headers(execution, clean_domain)
 
     def _run_dns_observations_for_domain(self, execution, domain):
         print(f"[DNS-OBS] Analizando {domain}")
@@ -426,7 +425,7 @@ class Orchestrator:
                 "CNAME"
             )
 
-            target_resolvable = self.database.get_domain_resolution_status(
+            target_resolvable = self.uow.domains.get_domain_resolution_status(
                 execution.ID,
                 record_value
             )
@@ -436,7 +435,7 @@ class Orchestrator:
                 dns_results = self.dns_collector.collect(record_value)
 
                 if dns_results:
-                    self.database.insert_domain(
+                    self.uow.domains.insert_domain(
                         execution.ID,
                         record_value,
                         source=C.TECHNIQUE_DNS_CNAME,
@@ -444,7 +443,7 @@ class Orchestrator:
                     )
 
                     for r in dns_results:
-                        self.database.insert_resolved_domain(
+                        self.uow.domains.insert_resolved_domain(
                             execution.ID,
                             r["domain"],
                             r["ip"],
@@ -453,7 +452,7 @@ class Orchestrator:
 
                     target_resolvable = True
                 else:
-                    self.database.insert_domain(
+                    self.uow.domains.insert_domain(
                         execution.ID,
                         record_value,
                         source=C.TECHNIQUE_DNS_CNAME,
@@ -467,7 +466,7 @@ class Orchestrator:
                 target_resolvable=target_resolvable
             )
 
-            self.database.insert_dns_observation(
+            self.uow.domains.insert_dns_observation(
                 execution.ID,
                 domain,
                 "CNAME",
@@ -502,7 +501,7 @@ class Orchestrator:
                 target_resolvable=None
             )
 
-            self.database.insert_dns_observation(
+            self.uow.domains.insert_dns_observation(
                 execution.ID,
                 domain,
                 "NS",
@@ -514,19 +513,20 @@ class Orchestrator:
                 exposure_level=exposure_level
             )
 
-    def _run_security_headers(self, execution, domain):
-        print("Ejecutando _run_security_headers")
+    def _run_http_headers(self, execution, domain):
+
         urls = [
             f"https://{domain}",
             f"https://www.{domain}",
             f"http://{domain}",
             f"http://www.{domain}",
         ]
+
         result = None
         used_url = None
 
         for url in urls:
-            result = self.security_headers_collector.collect(url)
+            result = self.http_headers_collector.collect(url)
             if result:
                 used_url = url
                 break
@@ -534,38 +534,29 @@ class Orchestrator:
         if not result:
             return
 
-        security_analysis = HeadersAnalyzer.analyze_security(result)
-        tech_analysis = HeadersAnalyzer.analyze_tech(result)
+        analyses = {
+            "security": HeadersAnalyzer.analyze_security(result),
+            "tech": HeadersAnalyzer.analyze_tech(result),
+        }
 
-        for h in security_analysis:
-            self.database.insert_security_header(
-                execution.ID,
-                domain,
-                used_url,
-                h["header"],
-                h["value"],
-                h["status"],
-                exposure_level=h["exposure_level"],
-                description=h["description"]
-            )
-
-        for h in tech_analysis:
-            self.database.insert_tech_header(
-                execution.ID,
-                domain,
-                used_url,
-                h["header"],
-                h["value"],
-                h["status"],
-                exposure_level=h["exposure_level"],
-                description=h["description"]
-            )
-
+        for category, headers in analyses.items():
+            for h in headers:
+                self.uow.headers.insert_http_header(
+                    execution.ID,
+                    domain,
+                    used_url,
+                    h["header"],
+                    h["value"],
+                    category,
+                    h["status"],
+                    h["exposure_level"],
+                    h["description"]
+                )
     def _run_whois(self, execution):
         print("Consultando WHOIS...")
         whois_data = self.whois_collector.collect(execution.TARGET)
         if whois_data:
-            self.database.insert_whois_result(
+            self.uow.whois.insert_whois_result(
                 execution.ID,
                 execution.TARGET,
                 whois_data
@@ -580,7 +571,7 @@ class Orchestrator:
                 continue
 
             if self._is_new_email(email, seen_emails):
-                self.database.insert_email(
+                self.uow.emails.insert_email(
                     execution.ID,
                     email,
                     execution.TARGET,
@@ -715,7 +706,7 @@ class Orchestrator:
             domain = urlparse(page_url).netloc
             origin = page.get("origin", "discovered")
 
-            self.database.insert_crawler_result(
+            self.uow.crawler.insert_crawler_result(
                 execution.ID,
                 page_url,
                 page.get("emails", []),
@@ -730,7 +721,7 @@ class Orchestrator:
                     continue
 
                 if self._is_new_email(email, seen_emails):
-                    self.database.insert_email(
+                    self.uow.emails.insert_email(
                         execution.ID,
                         email,
                         domain,
@@ -746,7 +737,7 @@ class Orchestrator:
             for ctype, value, source in creds:
 
                 if self._is_new_credential(ctype, value, seen_creds):
-                    self.database.insert_credential(
+                    self.uow.credentials.insert_credential(
                         execution.ID,
                         ctype,
                         value,
@@ -801,7 +792,7 @@ class Orchestrator:
 
                 stats.scripts_parsed_ok += 1
 
-                self.database.insert_js_result(
+                self.uow.crawler.insert_js_result(
                     execution.ID,
                     parsed["script_url"],
                     parsed.get("emails", []),
@@ -816,7 +807,7 @@ class Orchestrator:
 
                         if self._is_new_email(email, seen_emails):
 
-                            self.database.insert_email(
+                            self.uow.emails.insert_email(
                                 execution.ID,
                                 email,
                                 urlparse(script_url).netloc,
@@ -832,7 +823,7 @@ class Orchestrator:
                 for ctype, value, source in creds:
 
                     if self._is_new_credential(ctype, value, seen_creds):
-                        self.database.insert_credential(
+                        self.uow.credentials.insert_credential(
                             execution.ID,
                             ctype,
                             value,
@@ -868,7 +859,7 @@ class Orchestrator:
                     email = normalize_email(e)
                     if email and self._is_new_email(email, seen_emails):
                         print(f"[FILE][EMAIL] {email}")
-                        self.database.insert_email(
+                        self.uow.emails.insert_email(
                             execution.ID,
                             email,
                             urlparse(url).netloc,
@@ -881,7 +872,7 @@ class Orchestrator:
                 creds = self.cred_parser.parse(text, source=C.SOURCE_FILE)
                 for ctype, value, source in creds:
                     if self._is_new_credential(ctype, value, seen_creds):
-                        self.database.insert_credential(
+                        self.uow.credentials.insert_credential(
                             execution.ID,
                             ctype,
                             value,
@@ -895,6 +886,7 @@ class Orchestrator:
 
         if not live_results:
             print("[SCRAPING] No hay páginas LIVE, se omite scraping")
+            return
 
         for page in live_results:
             if "@" in page["url"]:
@@ -908,10 +900,11 @@ class Orchestrator:
 
             stats.scrape_succeeded += 1
 
+
             for e in result["emails_dom"]:
                 email = normalize_email(e)
                 if email and self._is_new_email(email, seen_emails):
-                    self.database.insert_email(
+                    self.uow.emails.insert_email(
                         execution.ID,
                         email,
                         urlparse(page["url"]).hostname,
@@ -920,9 +913,10 @@ class Orchestrator:
                         context=" "
                     )
 
+
             for ctype, value, source in result["credentials_dom"]:
                 if self._is_new_credential(ctype, value, seen_creds):
-                    self.database.insert_credential(
+                    self.uow.credentials.insert_credential(
                         execution.ID,
                         ctype,
                         value,
@@ -934,7 +928,7 @@ class Orchestrator:
             for e in result["emails_json"]:
                 email = normalize_email(e)
                 if email and self._is_new_email(email, seen_emails):
-                    self.database.insert_email(
+                    self.uow.emails.insert_email(
                         execution.ID,
                         email,
                         urlparse(page["url"]).netloc,
@@ -943,9 +937,10 @@ class Orchestrator:
                         context=" "
                     )
 
+
             for ctype, value, source in result["credentials_json"]:
                 if self._is_new_credential(ctype, value, seen_creds):
-                    self.database.insert_credential(
+                    self.uow.credentials.insert_credential(
                         execution.ID,
                         ctype,
                         value,
@@ -1058,9 +1053,7 @@ class Orchestrator:
                 seen_creds,
                 stats
             )
-
-        self.database.insert_metrics(execution.ID)
-
-        metrics = self.database.get_execution_metrics(execution.ID)
+        self.uow.metrics.insert_metrics(execution.ID)
+        metrics = self.uow.metrics.get_execution_metrics(execution.ID)
         self._print_summary(metrics, stats)
 

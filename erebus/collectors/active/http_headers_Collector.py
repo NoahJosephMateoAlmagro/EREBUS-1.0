@@ -1,7 +1,7 @@
 import requests
 import socket
 from urllib.parse import urlparse
-class SecurityHeadersCollector:
+class HttpHeadersCollector:
 
     def __init__(self, timeout=6):
         self.timeout = timeout

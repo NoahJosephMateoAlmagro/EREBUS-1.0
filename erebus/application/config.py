@@ -9,7 +9,7 @@ APP_CONFIG = {
         "subdomains": True,
         "whois": True,
         "dns": True,
-        "security_headers": True,
+        "http_headers": True,
         "emails_passive": True,
         "crawler": True,
         "js_parsing": False,
@@ -31,7 +31,7 @@ APP_CONFIG = {
 
         # Wayback (CDX)
         "wayback_max_snapshots": 50,
-        "wayback_min_year": 2008,
+        "wayback_min_year": 2000,
         "cdx_url_limit":2000,
 
         # JS
@@ -45,7 +45,7 @@ APP_CONFIG = {
         # HTTP (requests)
         "http_passive_email": 20,
         "http_subdomains": 25,
-        "http_security_headers": 5,
+        "http_headers": 5,
 
         # DNS
         "dns_resolution": 5,
@@ -62,7 +62,7 @@ APP_CONFIG = {
         "js_read": 5,
 
         #Files
-        "file_download": 10,
+        "file_download": 2,
 
         # Active scraping (Playwright)
         "scraping_page_load": 15000,  # ms

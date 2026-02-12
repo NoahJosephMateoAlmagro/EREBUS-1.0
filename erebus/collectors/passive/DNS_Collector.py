@@ -1,4 +1,4 @@
-import DNS_Collector.resolver
+import dns.resolver
 from collectors.base import PassiveCollector
 import shared.constants as C
 
@@ -13,7 +13,7 @@ class DNSCollector(PassiveCollector):
         resultados = []
 
         try:
-            respuestas = dns.resolver.resolve(target, "A")
+            respuestas = self.resolver.resolve(target, "A")
             for dato in sorted(respuestas, key=lambda r: r.to_text()):
 
                 resultados.append({

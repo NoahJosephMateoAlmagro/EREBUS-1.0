@@ -153,6 +153,6 @@ class Crawler:
                 })
 
             except Exception as e:
-                print(f"[ERROR] {url} -> {e}")
+                print(f"[CRAWLER ERROR] {url} -> {e}")
 
         return results
