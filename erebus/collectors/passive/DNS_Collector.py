@@ -8,6 +8,7 @@ class DNSCollector(PassiveCollector):
         self.resolver = dns.resolver.Resolver()
         self.resolver.lifetime = timeout
         self.resolver.timeout = timeout
+        self.resolver.nameservers = ["8.8.8.8", "1.1.1.1"]
 
     def collect(self, target: str):
         resultados = []
@@ -30,7 +31,7 @@ class DNSCollector(PassiveCollector):
             pass  # no hay A record
         except dns.resolver.Timeout:
             pass  # timeout DNS
-        except Exception:
-            pass  # cualquier otro error no crítico
+        except Exception as e:
+            print("DNS ERROR:", type(e), e)  # cualquier otro error no crítico
 
         return resultados

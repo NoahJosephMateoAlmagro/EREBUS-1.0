@@ -15,7 +15,9 @@ class DNSResolutionService:
             if not clean_domain:
                 continue
 
+            print("DEBUG -> resolving", clean_domain)
             dns_results = self.dns_collector.collect(clean_domain)
+            print("DEBUG -> result", dns_results)
 
             if dns_results:
                 self.uow.domains.update_domain_status(
