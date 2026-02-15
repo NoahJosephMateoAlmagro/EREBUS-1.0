@@ -31,7 +31,7 @@ from application.execution_stats import ExecutionStats
 
 from application.services.subdomain_service import SubdomainService
 from application.services.whois_service import WhoisService
-
+from application.services.email_passive_service import EmailPassiveService
 
 class Orchestrator:
 
@@ -255,6 +255,10 @@ class Orchestrator:
             uow=self.uow
         )
 
+        self.email_passive_service = EmailPassiveService(
+            email_collector=self.email_collector,
+            uow=self.uow
+        )
 
     # -----------------------------
     # Utils - Dedup logic (orchestration)
@@ -553,24 +557,6 @@ class Orchestrator:
                     h["status"],
                     h["exposure_level"],
                     h["description"]
-                )
-    def _run_passive_emails(self, context):
-        print("Buscando emails pasivos...")
-        email_results = self.email_collector.collect(context.execution.TARGET)
-
-        for r in email_results:
-            email = normalize_email(r["value"])
-            if not email:
-                continue
-
-            if self._is_new_email(email, context.seen_emails):
-                self.uow.emails.insert_email(
-                    context.execution.ID,
-                    email,
-                    context.execution.TARGET,
-                    technique=C.TECHNIQUE_PASSIVE_HTML,
-                    source=r["context"],
-                    context=r["context"]
                 )
     def _run_crawler(self, context):
 
@@ -977,7 +963,7 @@ class Orchestrator:
         # -------------------------------------------------
 
         if cfg["modules"]["emails_passive"]:
-            self._run_passive_emails(context)
+            self.email_passive_service.run(context)
 
         # -------------------------------------------------
         # 5. Crawling HTML (LIVE + WAYBACK)
