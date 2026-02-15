@@ -31,7 +31,13 @@ from application.execution_stats import ExecutionStats
 
 from application.services.subdomain_service import SubdomainService
 from application.services.whois_service import WhoisService
-from application.services.email_passive_service import EmailPassiveService
+from application.services.passive_email_service import EmailPassiveService
+from application.services.dns_services.dns_service import DNSService
+from application.services.dns_services.dns_context_service import DNSContextService
+from application.services.dns_services.dns_resolution_service import DNSResolutionService
+from application.services.dns_services.dns_observation_service import DNSObservationService
+from application.services.dns_services.http_headers_service import HttpHeadersService
+
 
 class Orchestrator:
 
@@ -260,6 +266,14 @@ class Orchestrator:
             uow=self.uow
         )
 
+        self.dns_service = DNSService(
+            context_service=DNSContextService(self.dns_mx_collector, self.dns_txt_collector, self.uow),
+            resolution_service=DNSResolutionService(self.dns_collector, self.uow, self._is_valid_domain),
+            observation_service=DNSObservationService(self.dns_cname_collector, self.dns_ns_collector,
+                                                      self.dns_collector, self.uow),
+            headers_service=HttpHeadersService(self.http_headers_collector, self.uow),
+        )
+
     # -----------------------------
     # Utils - Dedup logic (orchestration)
     # -----------------------------
@@ -288,54 +302,6 @@ class Orchestrator:
     # -----------------------------
     # Utils - Helpers
     # -----------------------------
-    def _calculate_base_domain_dns_context(self, execution, base_domain):
-
-        print(f"[DNS] Analizando MX/TXT del dominio base: {base_domain}")
-
-        # -------------------------
-        # MX
-        # -------------------------
-        mx_results = self.dns_mx_collector.collect(base_domain)
-        mx_hosts = sorted({
-            r["record"].lower()
-            for r in mx_results
-            if r.get("record")
-        })
-
-        # -------------------------
-        # TXT
-        # -------------------------
-        txt_results = self.dns_txt_collector.collect(base_domain)
-        txt_records = [
-            r["value"].lower()
-            for r in txt_results
-            if r.get("value")
-        ]
-
-        # -------------------------
-        # ANALYSIS (Analyzer)
-        # -------------------------
-        dns_context = DNS_Details_Analyzer.analyze_mail_dns_context(
-            mx_hosts=mx_hosts,
-            txt_records=txt_records
-        )
-
-        # -------------------------
-        # PERSISTENCE
-        # -------------------------
-        self.uow.domains.update_domain_dns_context(
-            execution.ID,
-            base_domain,
-            mx_records=", ".join(mx_hosts) if mx_hosts else None,
-            mail_provider=dns_context["mail_provider"],
-            spf_policy=dns_context["spf_policy"],
-            external_services=(
-                ", ".join(dns_context["external_services"])
-                if dns_context["external_services"]
-                else None
-            )
-        )
-
     def _extract_base_domain_for_js(self, page_url: str):
         if "web.archive.org" in page_url:
             try:
@@ -354,210 +320,6 @@ class Orchestrator:
     # Main
     # -------------------------------------------------
 
-    def _run_dns(self, context):
-        print("Resolviendo DNS...")
-
-        base_domain = context.execution.TARGET
-
-        # DNS contextual del dominio base
-        self._calculate_base_domain_dns_context(context.execution, base_domain)
-
-        # Resolución IPs
-        max_dns = int(context.cfg["limits"]["dns_max_domains"])
-        domains_to_resolve = list(context.all_domains)[:max_dns]
-
-        for domain in domains_to_resolve:
-            clean_domain = self._is_valid_domain(domain)
-            if not clean_domain:
-                continue
-
-            # ----------------------
-            # RESOLUCIÓN A IP
-            # ---------------------
-            dns_results = self.dns_collector.collect(clean_domain)
-
-            if dns_results:
-                self.uow.domains.update_domain_status(
-                    context.execution.ID,
-                    clean_domain,
-                    C.DOMAIN_STATUS_RESOLVABLE
-                )
-
-                for r in dns_results:
-                    self.uow.domains.insert_resolved_domain(
-                        context.execution.ID,
-                        r["domain"],
-                        r["ip"],
-                        r["source"]
-                    )
-            else:
-                self.uow.domains.update_domain_status(
-                    context.execution.ID,
-                    clean_domain,
-                    C.DOMAIN_STATUS_NOT_RESOLVABLE
-                )
-
-            # ---------------------
-            # DNS DETAILS
-            # ---------------------
-            self._run_dns_observations_for_domain(context, clean_domain)
-
-            # ---------------------
-            # CABECERAS
-            # ---------------------
-            print("[DEBUG] Después de DNS_OBS, antes de headers", clean_domain)
-
-            if context.cfg["modules"].get("http_headers"):
-                print("[DEBUG] Ejecutando http headers", clean_domain)
-                self._run_http_headers(context, clean_domain)
-
-    def _run_dns_observations_for_domain(self, context, domain):
-        print(f"[DNS-OBS] Analizando {domain}")
-
-        # ---------------------
-        # CNAME
-        # ---------------------
-        cname_results = self.dns_cname_collector.collect(domain)
-
-        for r in cname_results:
-            record_value = (r.get("record") or "").strip().lower()
-            if record_value.endswith("."):
-                record_value = record_value[:-1]
-            if not record_value:
-                continue
-
-            provider = DNS_Details_Analyzer.detect_provider_from_record(
-                record_value,
-                "CNAME"
-            )
-
-            target_resolvable = self.uow.domains.get_domain_resolution_status(
-                context.execution.ID,
-                record_value
-            )
-
-            if target_resolvable is None:
-                # Resolver bajo demanda (por si no se ha recogido de la fase de recolección dicho subdominio, entonces devuelve none)
-                dns_results = self.dns_collector.collect(record_value)
-
-                if dns_results:
-                    self.uow.domains.insert_domain(
-                        context.execution.ID,
-                        record_value,
-                        source=C.TECHNIQUE_DNS_CNAME,
-                        status=C.DOMAIN_STATUS_RESOLVABLE
-                    )
-
-                    for r in dns_results:
-                        self.uow.domains.insert_resolved_domain(
-                            context.execution.ID,
-                            r["domain"],
-                            r["ip"],
-                            r["source"]
-                        )
-
-                    target_resolvable = True
-                else:
-                    self.uow.domains.insert_domain(
-                        context.execution.ID,
-                        record_value,
-                        source=C.TECHNIQUE_DNS_CNAME,
-                        status=C.DOMAIN_STATUS_NOT_RESOLVABLE
-                    )
-                    target_resolvable = False
-
-            exposure_level = DNS_Details_Analyzer.calculate_exposure_level(
-                record_type="CNAME",
-                provider=provider,
-                target_resolvable=target_resolvable
-            )
-
-            self.uow.domains.insert_dns_observation(
-                context.execution.ID,
-                domain,
-                "CNAME",
-                record_value,
-                source="dns_resolver",
-                technique=C.TECHNIQUE_DNS_CNAME,
-                provider=provider,
-                target_resolvable=target_resolvable,
-                exposure_level=exposure_level
-            )
-
-        # ---------------------
-        # NS
-        # ---------------------
-        ns_results = self.dns_ns_collector.collect(domain)
-
-        for r in ns_results:
-            record_value = (r.get("record") or "").strip().lower()
-            if record_value.endswith("."):
-                record_value = record_value[:-1]
-            if not record_value:
-                continue
-
-            provider = DNS_Details_Analyzer.detect_provider_from_record(
-                record_value,
-                "NS"
-            )
-
-            exposure_level = DNS_Details_Analyzer.calculate_exposure_level(
-                record_type="NS",
-                provider=provider,
-                target_resolvable=None
-            )
-
-            self.uow.domains.insert_dns_observation(
-                context.execution.ID,
-                domain,
-                "NS",
-                record_value,
-                source="dns_resolver",
-                technique=C.TECHNIQUE_DNS_NS,
-                provider=provider,
-                target_resolvable=None,
-                exposure_level=exposure_level
-            )
-
-    def _run_http_headers(self, context, domain):
-
-        urls = [
-            f"https://{domain}",
-            f"https://www.{domain}",
-            f"http://{domain}",
-            f"http://www.{domain}",
-        ]
-
-        result = None
-        used_url = None
-
-        for url in urls:
-            result = self.http_headers_collector.collect(url)
-            if result:
-                used_url = url
-                break
-
-        if not result:
-            return
-
-        analyses = {
-            "security": HeadersAnalyzer.analyze_security(result),
-            "tech": HeadersAnalyzer.analyze_tech(result),
-        }
-
-        for category, headers in analyses.items():
-            for h in headers:
-                self.uow.headers.insert_http_header(
-                    context.execution.ID,
-                    domain,
-                    used_url,
-                    h["header"],
-                    h["value"],
-                    category,
-                    h["status"],
-                    h["exposure_level"],
-                    h["description"]
-                )
     def _run_crawler(self, context):
 
         wayback_results = []
@@ -956,7 +718,7 @@ class Orchestrator:
         # -------------------------------------------------
 
         if cfg["modules"]["dns"]:
-            self._run_dns(context)
+            self.dns_service.run(context)
 
         # -------------------------------------------------
         # 4. Emails pasivos (HTML simple)
