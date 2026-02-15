@@ -24,7 +24,7 @@ from processing.parsers.file_parser.txt_parser import TxtParser
 from processing.parsers.file_parser.pdf_parser import PdfParser
 from processing.parsers.file_parser.xml_parser import XmlParser
 from processing.normalizers.email_normalizer import extract_emails_from_text
-
+from application.objects.execution_context import ExecutionContext
 import shared.constants as C
 from application.execution_stats import ExecutionStats
 
@@ -331,34 +331,34 @@ class Orchestrator:
     # Main
     # -------------------------------------------------
 
-    def _run_subdomains(self, execution, all_domains, seen_domains):
+    def _run_subdomains(self, context):
         print("Encontrando subdominios...")
-        subdomains = self.subdomain_collector.collect(execution.TARGET, )
+        subdomains = self.subdomain_collector.collect(context.execution.TARGET, )
 
         for s in subdomains:
             domain = self._is_valid_domain(s.get("value"))
             if domain:
-                all_domains.add(domain)
+                context.all_domains.add(domain)
 
-        for domain in all_domains:
-            if self._is_new_domain(domain, seen_domains):
+        for domain in context.all_domains:
+            if self._is_new_domain(domain, context.seen_domains):
                 self.uow.domains.insert_domain(
-                    execution.ID,
+                    context.execution.ID,
                     domain,
                     source=C.TECHNIQUE_SUBDOMAINS,
                     status=C.DOMAIN_STATUS_NOT_EVALUATED
                 )
-    def _run_dns(self, execution, cfg, all_domains):
+    def _run_dns(self, context):
         print("Resolviendo DNS...")
 
-        base_domain = execution.TARGET
+        base_domain = context.execution.TARGET
 
         # DNS contextual del dominio base
-        self._calculate_base_domain_dns_context(execution, base_domain)
+        self._calculate_base_domain_dns_context(context.execution, base_domain)
 
         # Resolución IPs
-        max_dns = int(cfg["limits"]["dns_max_domains"])
-        domains_to_resolve = list(all_domains)[:max_dns]
+        max_dns = int(context.cfg["limits"]["dns_max_domains"])
+        domains_to_resolve = list(context.all_domains)[:max_dns]
 
         for domain in domains_to_resolve:
             clean_domain = self._is_valid_domain(domain)
@@ -372,21 +372,21 @@ class Orchestrator:
 
             if dns_results:
                 self.uow.domains.update_domain_status(
-                    execution.ID,
+                    context.execution.ID,
                     clean_domain,
                     C.DOMAIN_STATUS_RESOLVABLE
                 )
 
                 for r in dns_results:
                     self.uow.domains.insert_resolved_domain(
-                        execution.ID,
+                        context.execution.ID,
                         r["domain"],
                         r["ip"],
                         r["source"]
                     )
             else:
                 self.uow.domains.update_domain_status(
-                    execution.ID,
+                    context.execution.ID,
                     clean_domain,
                     C.DOMAIN_STATUS_NOT_RESOLVABLE
                 )
@@ -394,18 +394,18 @@ class Orchestrator:
             # ---------------------
             # DNS DETAILS
             # ---------------------
-            self._run_dns_observations_for_domain(execution, clean_domain)
+            self._run_dns_observations_for_domain(context, clean_domain)
 
             # ---------------------
             # CABECERAS
             # ---------------------
             print("[DEBUG] Después de DNS_OBS, antes de headers", clean_domain)
 
-            if cfg["modules"].get("http_headers"):
+            if context.cfg["modules"].get("http_headers"):
                 print("[DEBUG] Ejecutando http headers", clean_domain)
-                self._run_http_headers(execution, clean_domain)
+                self._run_http_headers(context, clean_domain)
 
-    def _run_dns_observations_for_domain(self, execution, domain):
+    def _run_dns_observations_for_domain(self, context, domain):
         print(f"[DNS-OBS] Analizando {domain}")
 
         # ---------------------
@@ -426,7 +426,7 @@ class Orchestrator:
             )
 
             target_resolvable = self.uow.domains.get_domain_resolution_status(
-                execution.ID,
+                context.execution.ID,
                 record_value
             )
 
@@ -436,7 +436,7 @@ class Orchestrator:
 
                 if dns_results:
                     self.uow.domains.insert_domain(
-                        execution.ID,
+                        context.execution.ID,
                         record_value,
                         source=C.TECHNIQUE_DNS_CNAME,
                         status=C.DOMAIN_STATUS_RESOLVABLE
@@ -444,7 +444,7 @@ class Orchestrator:
 
                     for r in dns_results:
                         self.uow.domains.insert_resolved_domain(
-                            execution.ID,
+                            context.execution.ID,
                             r["domain"],
                             r["ip"],
                             r["source"]
@@ -453,7 +453,7 @@ class Orchestrator:
                     target_resolvable = True
                 else:
                     self.uow.domains.insert_domain(
-                        execution.ID,
+                        context.execution.ID,
                         record_value,
                         source=C.TECHNIQUE_DNS_CNAME,
                         status=C.DOMAIN_STATUS_NOT_RESOLVABLE
@@ -467,7 +467,7 @@ class Orchestrator:
             )
 
             self.uow.domains.insert_dns_observation(
-                execution.ID,
+                context.execution.ID,
                 domain,
                 "CNAME",
                 record_value,
@@ -502,7 +502,7 @@ class Orchestrator:
             )
 
             self.uow.domains.insert_dns_observation(
-                execution.ID,
+                context.execution.ID,
                 domain,
                 "NS",
                 record_value,
@@ -513,7 +513,7 @@ class Orchestrator:
                 exposure_level=exposure_level
             )
 
-    def _run_http_headers(self, execution, domain):
+    def _run_http_headers(self, context, domain):
 
         urls = [
             f"https://{domain}",
@@ -542,7 +542,7 @@ class Orchestrator:
         for category, headers in analyses.items():
             for h in headers:
                 self.uow.headers.insert_http_header(
-                    execution.ID,
+                    context.execution.ID,
                     domain,
                     used_url,
                     h["header"],
@@ -552,34 +552,34 @@ class Orchestrator:
                     h["exposure_level"],
                     h["description"]
                 )
-    def _run_whois(self, execution):
+    def _run_whois(self, context):
         print("Consultando WHOIS...")
-        whois_data = self.whois_collector.collect(execution.TARGET)
+        whois_data = self.whois_collector.collect(context.execution.TARGET)
         if whois_data:
             self.uow.whois.insert_whois_result(
-                execution.ID,
-                execution.TARGET,
+                context.execution.ID,
+                context.execution.TARGET,
                 whois_data
             )
-    def _run_passive_emails(self, execution, seen_emails):
+    def _run_passive_emails(self, context):
         print("Buscando emails pasivos...")
-        email_results = self.email_collector.collect(execution.TARGET)
+        email_results = self.email_collector.collect(context.execution.TARGET)
 
         for r in email_results:
             email = normalize_email(r["value"])
             if not email:
                 continue
 
-            if self._is_new_email(email, seen_emails):
+            if self._is_new_email(email, context.seen_emails):
                 self.uow.emails.insert_email(
-                    execution.ID,
+                    context.execution.ID,
                     email,
-                    execution.TARGET,
+                    context.execution.TARGET,
                     technique=C.TECHNIQUE_PASSIVE_HTML,
                     source=r["context"],
                     context=r["context"]
                 )
-    def _run_crawler(self, execution, cfg, stats):
+    def _run_crawler(self, context):
 
         wayback_results = []
 
@@ -590,54 +590,53 @@ class Orchestrator:
         sources = {}  # url -> base | robots | sitemap
 
         # Base domain seeds
-        for u in self._build_crawl_urls(execution.TARGET):
+        for u in self._build_crawl_urls(context.execution.TARGET):
             crawl_urls.add(u)
             sources[u] = "base"
 
         # Robots + sitemap
         self._run_robots_and_sitemap(
-            execution,
-            cfg,
+            context,
             crawl_urls,
             sources,
-            stats
+            context.stats
         )
 
         crawler_live = self.crawler_cls(
             start_url=list(crawl_urls),
             max_pages=self.crawler_live_max_pages,
             timeout=self.crawler_live_timeout,
-            allowed_domain=execution.TARGET,
+            allowed_domain=context.execution.TARGET,
             sources=sources
         )
 
         print("Buscando emails mediante crawler (live + wayback)...")
 
         live_results = crawler_live.run()
-        stats.live_pages_visited = len(live_results)
+        context.stats.live_pages_visited = len(live_results)
 
         # Contadores de páginas LIVE visitadas por origen
-        stats.visited_from_robots = 0
-        stats.visited_from_sitemap = 0
-        stats.visited_discovered = 0
+        context.stats.visited_from_robots = 0
+        context.stats.visited_from_sitemap = 0
+        context.stats.visited_discovered = 0
 
         for page in live_results:
             origin = page.get("origin", "discovered")
 
             if origin == "robots":
-                stats.visited_from_robots += 1
+                context.stats.visited_from_robots += 1
             elif origin == "sitemap":
-                stats.visited_from_sitemap += 1
+                context.stats.visited_from_sitemap += 1
             else:
-                stats.visited_discovered += 1
+                context.stats.visited_discovered += 1
 
         # -------------------------
         # WAYBACK CRAWLER
         # -------------------------
-        if cfg["modules"].get("wayback"):
+        if context.cfg["modules"].get("wayback"):
             print("Recolectando URLs históricas desde Wayback Machine...")
-            wayback_urls = self.wayback_collector.collect(execution.TARGET)
-            stats.wayback_urls_collected = len(wayback_urls)
+            wayback_urls = self.wayback_collector.collect(context.execution.TARGET)
+            context.stats.wayback_urls_collected = len(wayback_urls)
 
             if wayback_urls:
                 crawler_wb = self.crawler_cls(
@@ -648,18 +647,20 @@ class Orchestrator:
                 )
 
                 wayback_results = crawler_wb.run()
-                stats.wayback_pages_visited = len(wayback_results)
+                context.stats.wayback_pages_visited = len(wayback_results)
 
                 for page in wayback_results:
                     page["origin"] = "wayback"
 
-        return live_results, wayback_results
+        context.live_results = live_results
+        context.wayback_results = wayback_results
+        context.crawl_results = live_results + wayback_results
 
-    def _run_robots_and_sitemap(self, execution, cfg, urls, sources, stats):
+    def _run_robots_and_sitemap(self, context, urls, sources, stats):
         print("Analizando robots.txt y sitemap.xml...")
 
-        robots = self.robots_collector.collect(execution.TARGET)
-        max_robots = int(cfg["limits"].get("robots_max_urls", 0))
+        robots = self.robots_collector.collect(context.execution.TARGET)
+        max_robots = int(context.cfg["limits"].get("robots_max_urls", 0))
         robots_added = 0
 
         for path in robots.get("paths", []):
@@ -669,7 +670,7 @@ class Orchestrator:
             if "*" in path or "$" in path:
                 continue
 
-            url = f"https://{execution.TARGET}{path}"
+            url = f"https://{context.execution.TARGET}{path}"
             if url not in sources:
                 urls.add(url)
             sources[url] = "robots"
@@ -699,15 +700,15 @@ class Orchestrator:
 
         print(f"[ROBOTS] Sitemaps detectados: {sitemaps}")
         print(f"[SITEMAP] URLs añadidas: {sitemap_urls_added}")
-    def _process_crawl_results(self,execution,crawl_results,seen_emails,seen_creds):
+    def _process_crawl_results(self,context):
 
-        for page in crawl_results:
+        for page in context.crawl_results:
             page_url = page["url"]
             domain = urlparse(page_url).netloc
             origin = page.get("origin", "discovered")
 
             self.uow.crawler.insert_crawler_result(
-                execution.ID,
+                context.execution.ID,
                 page_url,
                 page.get("emails", []),
                 page.get("links", []),
@@ -720,9 +721,9 @@ class Orchestrator:
                 if not email:
                     continue
 
-                if self._is_new_email(email, seen_emails):
+                if self._is_new_email(email, context.seen_emails):
                     self.uow.emails.insert_email(
-                        execution.ID,
+                        context.execution.ID,
                         email,
                         domain,
                         technique=C.TECHNIQUE_CRAWLER_HTML,
@@ -736,25 +737,25 @@ class Orchestrator:
 
             for ctype, value, source in creds:
 
-                if self._is_new_credential(ctype, value, seen_creds):
+                if self._is_new_credential(ctype, value, context.seen_creds):
                     self.uow.credentials.insert_credential(
-                        execution.ID,
+                        context.execution.ID,
                         ctype,
                         value,
                         technique=C.TECHNIQUE_CRAWLER_HTML,
                         source=page_url,
                         context=origin
                     )
-    def _run_js_parsing(self, execution, cfg, live_results, seen_emails, seen_creds, stats):
+    def _run_js_parsing(self,context):
         print("Parseando JS (live + wayback)...")
 
-        stats.scripts_parse_limit = int(cfg["limits"]["js_max_scripts"])
+        context.stats.scripts_parse_limit = int(context.cfg["limits"]["js_max_scripts"])
 
-        if not live_results:
+        if not context.live_results:
             print("[JS] No hay páginas LIVE, se omite parsing JS")
 
-        for page in live_results:
-            if stats.scripts_parsed_ok >= stats.scripts_parse_limit:
+        for page in context.live_results:
+            if context.stats.scripts_parsed_ok >= context.stats.scripts_parse_limit:
                 break
 
             if "@" in page["url"]:
@@ -783,17 +784,17 @@ class Orchestrator:
 
 
             for script_url in page.get("scripts", []):
-                if stats.scripts_parsed_ok >= stats.scripts_parse_limit:
+                if context.stats.scripts_parsed_ok >= context.stats.scripts_parse_limit:
                     break
 
                 parsed = self.js_parser.parse(script_url, base_domain)
                 if not parsed:
                     continue
 
-                stats.scripts_parsed_ok += 1
+                context.stats.scripts_parsed_ok += 1
 
                 self.uow.crawler.insert_js_result(
-                    execution.ID,
+                    context.execution.ID,
                     parsed["script_url"],
                     parsed.get("emails", []),
                     parsed.get("urls", [])
@@ -805,10 +806,10 @@ class Orchestrator:
 
                     if email:
 
-                        if self._is_new_email(email, seen_emails):
+                        if self._is_new_email(email, context.seen_emails):
 
                             self.uow.emails.insert_email(
-                                execution.ID,
+                                context.execution.ID,
                                 email,
                                 urlparse(script_url).netloc,
                                 technique=technique,
@@ -822,9 +823,9 @@ class Orchestrator:
 
                 for ctype, value, source in creds:
 
-                    if self._is_new_credential(ctype, value, seen_creds):
+                    if self._is_new_credential(ctype, value, context.seen_creds):
                         self.uow.credentials.insert_credential(
-                            execution.ID,
+                            context.execution.ID,
                             ctype,
                             value,
                             technique=technique,
@@ -832,10 +833,10 @@ class Orchestrator:
                             context=" "
                         )
 
-    def _run_file_parsing(self, execution, crawl_results, seen_emails, seen_creds, stats):
+    def _run_file_parsing(self,context):
         print("Parseando archivos descargables...")
 
-        for page in crawl_results:
+        for page in context.crawl_results:
             origin = page.get("origin", "discovered")
 
             for url in page.get("links", []):
@@ -857,10 +858,10 @@ class Orchestrator:
                 emails = extract_emails_from_text(text)
                 for e in emails:
                     email = normalize_email(e)
-                    if email and self._is_new_email(email, seen_emails):
+                    if email and self._is_new_email(email, context.seen_emails):
                         print(f"[FILE][EMAIL] {email}")
                         self.uow.emails.insert_email(
-                            execution.ID,
+                            context.execution.ID,
                             email,
                             urlparse(url).netloc,
                             technique=technique,
@@ -871,9 +872,9 @@ class Orchestrator:
                 # Credenciales en archivos
                 creds = self.cred_parser.parse(text, source=C.SOURCE_FILE)
                 for ctype, value, source in creds:
-                    if self._is_new_credential(ctype, value, seen_creds):
+                    if self._is_new_credential(ctype, value, context.seen_creds):
                         self.uow.credentials.insert_credential(
-                            execution.ID,
+                            context.execution.ID,
                             ctype,
                             value,
                             technique=technique,
@@ -881,31 +882,31 @@ class Orchestrator:
                             context=origin
                         )
 
-    def _run_scraping(self, execution, live_results, seen_emails, seen_creds, stats):
+    def _run_scraping(self, context):
         print("Realizando scraping activo (solo live)...")
 
-        if not live_results:
+        if not context.live_results:
             print("[SCRAPING] No hay páginas LIVE, se omite scraping")
             return
 
-        for page in live_results:
+        for page in context.live_results:
             if "@" in page["url"]:
                 continue
 
-            stats.scrape_attempted += 1
+            context.stats.scrape_attempted += 1
             result = self.scraper.scrape(page["url"])
             if not result:
-                stats.scrape_failed += 1
+                context.stats.scrape_failed += 1
                 continue
 
-            stats.scrape_succeeded += 1
+            context.stats.scrape_succeeded += 1
 
 
             for e in result["emails_dom"]:
                 email = normalize_email(e)
-                if email and self._is_new_email(email, seen_emails):
+                if email and self._is_new_email(email, context.seen_emails):
                     self.uow.emails.insert_email(
-                        execution.ID,
+                        context.execution.ID,
                         email,
                         urlparse(page["url"]).hostname,
                         technique=C.TECHNIQUE_SCRAPING_DOM,
@@ -915,9 +916,9 @@ class Orchestrator:
 
 
             for ctype, value, source in result["credentials_dom"]:
-                if self._is_new_credential(ctype, value, seen_creds):
+                if self._is_new_credential(ctype, value, context.seen_creds):
                     self.uow.credentials.insert_credential(
-                        execution.ID,
+                        context.execution.ID,
                         ctype,
                         value,
                         technique=C.TECHNIQUE_SCRAPING_DOM,
@@ -927,9 +928,9 @@ class Orchestrator:
 
             for e in result["emails_json"]:
                 email = normalize_email(e)
-                if email and self._is_new_email(email, seen_emails):
+                if email and self._is_new_email(email, context.seen_emails):
                     self.uow.emails.insert_email(
-                        execution.ID,
+                        context.execution.ID,
                         email,
                         urlparse(page["url"]).netloc,
                         technique=C.TECHNIQUE_SCRAPING_JSON,
@@ -939,9 +940,9 @@ class Orchestrator:
 
 
             for ctype, value, source in result["credentials_json"]:
-                if self._is_new_credential(ctype, value, seen_creds):
+                if self._is_new_credential(ctype, value, context.seen_creds):
                     self.uow.credentials.insert_credential(
-                        execution.ID,
+                        context.execution.ID,
                         ctype,
                         value,
                         technique=C.TECHNIQUE_SCRAPING_JSON,
@@ -954,49 +955,36 @@ class Orchestrator:
 
         self._validate_cfg(cfg)
         self._init_collectors(cfg)
-        stats = ExecutionStats()
 
-        # -------------------------------------------------
-        # 0. Estado inicial
-        # -------------------------------------------------
-
-        seen_emails = set()
-        seen_creds = set()
-        seen_domains = set()
-
-        all_domains = set()
-        all_domains.add(execution.TARGET)
-
-        live_results = []
-        wayback_results = []
+        context = ExecutionContext(execution, cfg)
 
         # -------------------------------------------------
         # 1. Subdominios (pasivo)
         # -------------------------------------------------
 
         if cfg["modules"]["subdomains"]:
-            self._run_subdomains(execution, all_domains, seen_domains)
+            self._run_subdomains(context)
 
         # -------------------------------------------------
         # 2. WHOIS
         # -------------------------------------------------
 
         if cfg["modules"]["whois"]:
-            self._run_whois(execution)
+            self._run_whois(context)
 
         # -------------------------------------------------
         # 3. DNS
         # -------------------------------------------------
 
         if cfg["modules"]["dns"]:
-            self._run_dns(execution, cfg, all_domains)
+            self._run_dns(context)
 
         # -------------------------------------------------
         # 4. Emails pasivos (HTML simple)
         # -------------------------------------------------
 
         if cfg["modules"]["emails_passive"]:
-            self._run_passive_emails(execution, seen_emails)
+            self._run_passive_emails(context)
 
         # -------------------------------------------------
         # 5. Crawling HTML (LIVE + WAYBACK)
@@ -1004,13 +992,8 @@ class Orchestrator:
 
 
         if cfg["modules"]["crawler"]:
-            live_results, wayback_results = self._run_crawler(execution, cfg, stats)
-
-            self._process_crawl_results(
-                execution,
-                live_results + wayback_results,
-                seen_emails,
-                seen_creds)
+            self._run_crawler(context)
+            self._process_crawl_results(context)
 
         # -------------------------------------------------
         # 6. Parsing JS
@@ -1018,42 +1001,26 @@ class Orchestrator:
 
         if cfg["modules"]["js_parsing"]:
 
-            print(f"[DEBUG] LIVE pages: {len(live_results)}")
-            print(f"[DEBUG] WAYBACK pages: {len(wayback_results)}")
+            print(f"[DEBUG] LIVE pages: {len(context.live_results)}")
+            print(f"[DEBUG] WAYBACK pages: {len(context.wayback_results)}")
 
-            self._run_js_parsing(
-                execution,
-                cfg,
-                live_results + wayback_results,
-                seen_emails,
-                seen_creds, stats)
+            self._run_js_parsing(context)
 
         # -------------------------------------------------
         # 7. Parsing de archivos
         # -------------------------------------------------
 
         if cfg["modules"].get("file_parsing"):
-            self._run_file_parsing(
-                execution,
-                live_results + wayback_results,
-                seen_emails,
-                seen_creds,
-                stats
-            )
+            self._run_file_parsing(context)
 
         # -------------------------------------------------
         # 8. Scraping activo (SOLO LIVE)
         # -------------------------------------------------
 
         if cfg["modules"]["scraping"]:
-            self._run_scraping(
-                execution,
-                live_results,
-                seen_emails,
-                seen_creds,
-                stats
-            )
+            self._run_scraping(context)
+
         self.uow.metrics.insert_metrics(execution.ID)
         metrics = self.uow.metrics.get_execution_metrics(execution.ID)
-        self._print_summary(metrics, stats)
+        self._print_summary(metrics, context.stats)
 
