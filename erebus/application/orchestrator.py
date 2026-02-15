@@ -28,6 +28,11 @@ from application.objects.execution_context import ExecutionContext
 import shared.constants as C
 from application.execution_stats import ExecutionStats
 
+
+from application.services.subdomain_service import SubdomainService
+from application.services.whois_service import WhoisService
+
+
 class Orchestrator:
 
     def __init__(self, uow):
@@ -237,6 +242,20 @@ class Orchestrator:
             min_year=int(cfg["limits"]["wayback_min_year"])
         )
 
+        #SERVICIOS
+
+        self.subdomain_service = SubdomainService(
+            subdomain_collector=self.subdomain_collector,
+            uow=self.uow,
+            domain_validator=self._is_valid_domain
+        )
+
+        self.whois_service = WhoisService(
+            whois_collector=self.whois_collector,
+            uow=self.uow
+        )
+
+
     # -----------------------------
     # Utils - Dedup logic (orchestration)
     # -----------------------------
@@ -331,23 +350,6 @@ class Orchestrator:
     # Main
     # -------------------------------------------------
 
-    def _run_subdomains(self, context):
-        print("Encontrando subdominios...")
-        subdomains = self.subdomain_collector.collect(context.execution.TARGET, )
-
-        for s in subdomains:
-            domain = self._is_valid_domain(s.get("value"))
-            if domain:
-                context.all_domains.add(domain)
-
-        for domain in context.all_domains:
-            if self._is_new_domain(domain, context.seen_domains):
-                self.uow.domains.insert_domain(
-                    context.execution.ID,
-                    domain,
-                    source=C.TECHNIQUE_SUBDOMAINS,
-                    status=C.DOMAIN_STATUS_NOT_EVALUATED
-                )
     def _run_dns(self, context):
         print("Resolviendo DNS...")
 
@@ -552,15 +554,6 @@ class Orchestrator:
                     h["exposure_level"],
                     h["description"]
                 )
-    def _run_whois(self, context):
-        print("Consultando WHOIS...")
-        whois_data = self.whois_collector.collect(context.execution.TARGET)
-        if whois_data:
-            self.uow.whois.insert_whois_result(
-                context.execution.ID,
-                context.execution.TARGET,
-                whois_data
-            )
     def _run_passive_emails(self, context):
         print("Buscando emails pasivos...")
         email_results = self.email_collector.collect(context.execution.TARGET)
@@ -963,14 +956,14 @@ class Orchestrator:
         # -------------------------------------------------
 
         if cfg["modules"]["subdomains"]:
-            self._run_subdomains(context)
+            self.subdomain_service.run(context)
 
         # -------------------------------------------------
         # 2. WHOIS
         # -------------------------------------------------
 
         if cfg["modules"]["whois"]:
-            self._run_whois(context)
+            self.whois_service.run(context)
 
         # -------------------------------------------------
         # 3. DNS
