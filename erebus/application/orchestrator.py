@@ -15,17 +15,13 @@ from collectors.active.scraper import Scraper
 from processing.normalizers.email_normalizer import normalize_email
 from collectors.active.robots_Collector import RobotsCollector
 from collectors.active.sitemap_Collector import SitemapCollector
-from processing.analyzers.DNS_Details_Analyzer import DNS_Details_Analyzer
 from collectors.passive.waybackMachine_Collector import WaybackCollector
 from collectors.active.http_headers_Collector import HttpHeadersCollector
-from processing.analyzers.headers_analyzer import HeadersAnalyzer
 from processing.parsers.file_parser.file_parser import FileParser
 from processing.parsers.file_parser.txt_parser import TxtParser
 from processing.parsers.file_parser.pdf_parser import PdfParser
 from processing.parsers.file_parser.xml_parser import XmlParser
-from processing.normalizers.email_normalizer import extract_emails_from_text
 from application.objects.execution_context import ExecutionContext
-import shared.constants as C
 from application.execution_stats import ExecutionStats
 
 
@@ -37,6 +33,13 @@ from application.services.dns_services.dns_context_service import DNSContextServ
 from application.services.dns_services.dns_resolution_service import DNSResolutionService
 from application.services.dns_services.dns_observation_service import DNSObservationService
 from application.services.dns_services.http_headers_service import HttpHeadersService
+from application.services.crawling_services.crawler_processing_service import CrawlerProcessingService
+from application.services.crawling_services.crawling_service import CrawlingService
+from application.services.crawling_services.seed_discovery_service import SeedDiscoveryService
+from application.services.JS_parsing_service import JSParsingService
+from application.services.file_parsing_service import FileParsingService
+from application.services.scraping_service import ScrapingService
+from application.services.print_debug_service import PrintDebugService
 
 
 class Orchestrator:
@@ -46,67 +49,6 @@ class Orchestrator:
     # -------------------------------------------------
     # Utils - Prints
     # -------------------------------------------------
-    def _print_summary(self, metrics, stats):
-        print("\n========== SUMARY ==========")
-        self._print_db_metrics(metrics)
-        self._print_execution_stats(stats)
-        self._print_mail_DNS_info()
-
-        print("========== END SUMARY ==========")
-
-    def _print_db_metrics(self, metrics):
-        print("========== DB METRICS ==========")
-
-        print("\n--- EMAILS ---")
-        print(f"[EMAILS] total: {metrics.get('emails_total', 0)}")
-        print(f"[EMAILS] crawler_html: {metrics.get('emails_crawler_html', 0)}")
-        print(f"[EMAILS] js_static: {metrics.get('emails_js_static', 0)}")
-        print(f"[EMAILS] scraping_dom: {metrics.get('emails_scraping_dom', 0)}")
-        print(f"[EMAILS] scraping_json: {metrics.get('emails_scraping_json', 0)}")
-        print(f"[EMAILS] detected_by_scraping: {metrics.get('emails_detected_by_scraping', 0)}")
-        print(f"[EMAILS] detected_without_scraping: {metrics.get('emails_detected_without_scraping', 0)}")
-
-        print("\n--- CREDENTIALS ---")
-        print(f"[CREDS] total: {metrics.get('creds_total', 0)}")
-        print(f"[CREDS] creds_detected_by_scraping: {metrics.get('creds_detected_by_scraping', 0)}")
-        print(f"[CREDS] creds_detected_without_scraping: {metrics.get('creds_detected_without_scraping', 0)}")
-
-        print("\n========== END METRICS ==========\n")
-
-    def _print_execution_stats (self, stats: ExecutionStats):
-
-        print("\n========== EXECUTION STATS ==========")
-
-        print("\n--- CRAWLER (LIVE) ---")
-        print(f"[CRAWLER] live pages visited: {stats.live_pages_visited}")
-        print(f"[CRAWLER] visited from robots.txt: {stats.visited_from_robots}")
-        print(f"[CRAWLER] visited from sitemap.xml (y las derivadas de las mismas): {stats.visited_from_sitemap}")
-        print(f"[CRAWLER] visited discovered (links): {stats.visited_discovered}")
-
-        print("\n--- CRAWLER (WAYBACK) ---")
-        print(f"[CRAWLER] wayback urls collected: {stats.wayback_urls_collected}")
-        print(f"[CRAWLER] wayback pages visited: {stats.wayback_pages_visited}")
-
-        print("\n--- JS PARSING ---")
-        print(f"[JS] scripts parsed: {stats.scripts_parsed_ok}/{stats.scripts_parse_limit}")
-
-        print("\n--- SCRAPING ---")
-        print(f"[SCRAPING] attempted: {stats.scrape_attempted}")
-        print(f"[SCRAPING] succeeded: {stats.scrape_succeeded}")
-        print(f"[SCRAPING] failed: {stats.scrape_failed}")
-
-        print("\n========== END STATS ==========")
-
-    def _print_mail_DNS_info(self):
-        mail = self.uow.domains.get_dns_mail_summary()
-        if mail:
-            print("\n========== DNS MAIL ==========")
-            print(f"[MAIL] domain: {mail['domain']}")
-            print(f"[MAIL] provider: {mail['mail_provider']}")
-            print(f"[MAIL] SPF policy: {mail['spf_policy']}")
-            print(f"[MAIL] external services: {', '.join(mail['external_services'])}")
-            print("========== END DNS MAIL ==========")
-
 
     # -------------------------------------------------
     # Utils - Validations
@@ -134,14 +76,6 @@ class Orchestrator:
             return None
 
         return value
-    def _build_crawl_urls(self, domain: str):
-        print("Creando urls para crawl...")
-        return [
-            f"https://{domain}",
-            f"https://www.{domain}",
-            f"http://{domain}",
-            f"http://www.{domain}",
-        ]
     def _validate_cfg(self, cfg):
         if cfg is None:
             raise ValueError("Configuración requerida: cfg no puede ser None")
@@ -269,35 +203,48 @@ class Orchestrator:
         self.dns_service = DNSService(
             context_service=DNSContextService(self.dns_mx_collector, self.dns_txt_collector, self.uow),
             resolution_service=DNSResolutionService(self.dns_collector, self.uow, self._is_valid_domain),
-            observation_service=DNSObservationService(self.dns_cname_collector, self.dns_ns_collector,
-                                                      self.dns_collector, self.uow),
+            observation_service=DNSObservationService(self.dns_cname_collector, self.dns_ns_collector, self.dns_collector, self.uow),
             headers_service=HttpHeadersService(self.http_headers_collector, self.uow),
         )
 
-    # -----------------------------
-    # Utils - Dedup logic (orchestration)
-    # -----------------------------
+        self.crawler_processing_service = CrawlerProcessingService(
+            uow=self.uow,
+            cred_parser=self.cred_parser,
+            normalize_email_func=normalize_email
+        )
 
-    # Sets de deduplicado lógico.
-    # Permiten conservar la primera aparición temporal de cada entidad
-    # sin afectar a las métricas de detección.
+        self.seed_discovery_service = SeedDiscoveryService(
+            robots_collector=self.robots_collector,
+            sitemap_collector=self.sitemap_collector
+        )
 
-    def _is_new_email(self, email, seen):
-          if email in seen:
-              return False
-          seen.add(email)
-          return True
-    def _is_new_credential(self, ctype, value, seen):
-        key = (ctype, value.lower())
-        if key in seen:
-            return False
-        seen.add(key)
-        return True
-    def _is_new_domain(self, domain, seen):
-        if domain in seen:
-            return False
-        seen.add(domain)
-        return True
+        self.crawling_service = CrawlingService(
+            crawler_cls=self.crawler_cls,
+            seed_discovery_service=self.seed_discovery_service,
+            wayback_collector=self.wayback_collector,
+            live_timeout=self.crawler_live_timeout,
+            live_max_pages=self.crawler_live_max_pages,
+            wayback_timeout=self.crawler_wayback_timeout,
+            wayback_max_pages=self.crawler_wayback_max_pages,
+        )
+
+        self.js_parsing_service = JSParsingService(
+            js_parser=self.js_parser,
+            cred_parser=self.cred_parser,
+            uow=self.uow
+        )
+        self.file_parsing_service = FileParsingService(
+            file_parser=self.file_parser,
+            cred_parser=self.cred_parser,
+            uow=self.uow
+        )
+        self.scraping_service = ScrapingService(
+            scraper=self.scraper,
+            cred_parser=self.cred_parser,
+            uow=self.uow
+        )
+
+        self.print_debug_service = PrintDebugService(self.uow)
 
     # -----------------------------
     # Utils - Helpers
@@ -319,378 +266,6 @@ class Orchestrator:
     # -------------------------------------------------
     # Main
     # -------------------------------------------------
-
-    def _run_crawler(self, context):
-
-        wayback_results = []
-
-        # -------------------------
-        # LIVE CRAWLER
-        # -------------------------
-        crawl_urls = set()
-        sources = {}  # url -> base | robots | sitemap
-
-        # Base domain seeds
-        for u in self._build_crawl_urls(context.execution.TARGET):
-            crawl_urls.add(u)
-            sources[u] = "base"
-
-        # Robots + sitemap
-        self._run_robots_and_sitemap(
-            context,
-            crawl_urls,
-            sources,
-            context.stats
-        )
-
-        crawler_live = self.crawler_cls(
-            start_url=list(crawl_urls),
-            max_pages=self.crawler_live_max_pages,
-            timeout=self.crawler_live_timeout,
-            allowed_domain=context.execution.TARGET,
-            sources=sources
-        )
-
-        print("Buscando emails mediante crawler (live + wayback)...")
-
-        live_results = crawler_live.run()
-        context.stats.live_pages_visited = len(live_results)
-
-        # Contadores de páginas LIVE visitadas por origen
-        context.stats.visited_from_robots = 0
-        context.stats.visited_from_sitemap = 0
-        context.stats.visited_discovered = 0
-
-        for page in live_results:
-            origin = page.get("origin", "discovered")
-
-            if origin == "robots":
-                context.stats.visited_from_robots += 1
-            elif origin == "sitemap":
-                context.stats.visited_from_sitemap += 1
-            else:
-                context.stats.visited_discovered += 1
-
-        # -------------------------
-        # WAYBACK CRAWLER
-        # -------------------------
-        if context.cfg["modules"].get("wayback"):
-            print("Recolectando URLs históricas desde Wayback Machine...")
-            wayback_urls = self.wayback_collector.collect(context.execution.TARGET)
-            context.stats.wayback_urls_collected = len(wayback_urls)
-
-            if wayback_urls:
-                crawler_wb = self.crawler_cls(
-                    start_url=[u["url"] for u in wayback_urls],
-                    max_pages=self.crawler_wayback_max_pages,
-                    timeout=self.crawler_wayback_timeout,
-                    allowed_domain=None
-                )
-
-                wayback_results = crawler_wb.run()
-                context.stats.wayback_pages_visited = len(wayback_results)
-
-                for page in wayback_results:
-                    page["origin"] = "wayback"
-
-        context.live_results = live_results
-        context.wayback_results = wayback_results
-        context.crawl_results = live_results + wayback_results
-
-    def _run_robots_and_sitemap(self, context, urls, sources, stats):
-        print("Analizando robots.txt y sitemap.xml...")
-
-        robots = self.robots_collector.collect(context.execution.TARGET)
-        max_robots = int(context.cfg["limits"].get("robots_max_urls", 0))
-        robots_added = 0
-
-        for path in robots.get("paths", []):
-            if max_robots and robots_added >= max_robots:
-                break
-
-            if "*" in path or "$" in path:
-                continue
-
-            url = f"https://{context.execution.TARGET}{path}"
-            if url not in sources:
-                urls.add(url)
-            sources[url] = "robots"
-            robots_added += 1
-
-        print(f"[ROBOTS] URLs añadidas: {robots_added}")
-
-        # Sitemaps
-        sitemaps = robots.get("sitemaps", [])
-        sitemap_urls_added = 0
-        max_sitemap_urls = self.sitemap_collector.max_urls
-
-        for sitemap_url in sitemaps:
-            if sitemap_urls_added >= max_sitemap_urls:
-                break
-
-            sitemap_urls = self.sitemap_collector.collect(sitemap_url)
-
-            for u in sitemap_urls:
-                if sitemap_urls_added >= max_sitemap_urls:
-                    break
-
-                if u not in sources:
-                    urls.add(u)
-                    sources[u] = "sitemap"
-                    sitemap_urls_added += 1
-
-        print(f"[ROBOTS] Sitemaps detectados: {sitemaps}")
-        print(f"[SITEMAP] URLs añadidas: {sitemap_urls_added}")
-    def _process_crawl_results(self,context):
-
-        for page in context.crawl_results:
-            page_url = page["url"]
-            domain = urlparse(page_url).netloc
-            origin = page.get("origin", "discovered")
-
-            self.uow.crawler.insert_crawler_result(
-                context.execution.ID,
-                page_url,
-                page.get("emails", []),
-                page.get("links", []),
-                page.get("scripts", [])
-            )
-
-            # Emails HTML
-            for e in page.get("emails", []):
-                email = normalize_email(e)
-                if not email:
-                    continue
-
-                if self._is_new_email(email, context.seen_emails):
-                    self.uow.emails.insert_email(
-                        context.execution.ID,
-                        email,
-                        domain,
-                        technique=C.TECHNIQUE_CRAWLER_HTML,
-                        source=page_url,
-                        context=origin
-                    )
-
-            # Credenciales HTML
-            raw_html = page.get("raw_html", "")
-            creds = self.cred_parser.parse(raw_html, source=C.SOURCE_HTML)
-
-            for ctype, value, source in creds:
-
-                if self._is_new_credential(ctype, value, context.seen_creds):
-                    self.uow.credentials.insert_credential(
-                        context.execution.ID,
-                        ctype,
-                        value,
-                        technique=C.TECHNIQUE_CRAWLER_HTML,
-                        source=page_url,
-                        context=origin
-                    )
-    def _run_js_parsing(self,context):
-        print("Parseando JS (live + wayback)...")
-
-        context.stats.scripts_parse_limit = int(context.cfg["limits"]["js_max_scripts"])
-
-        if not context.live_results:
-            print("[JS] No hay páginas LIVE, se omite parsing JS")
-
-        for page in context.live_results:
-            if context.stats.scripts_parsed_ok >= context.stats.scripts_parse_limit:
-                break
-
-            if "@" in page["url"]:
-                continue
-
-            origin = page.get("origin")
-
-            technique = (
-                C.TECHNIQUE_JS_STATIC_WAYBACK
-                if origin == "wayback"
-                else C.TECHNIQUE_JS_STATIC
-            )
-
-            base_domain = self._extract_base_domain_for_js(page["url"])
-            if not base_domain:
-                continue
-
-            scripts = page.get("scripts", []) or []
-
-            print(
-                f"[DEBUG][JS] page_url={page['url']} | "
-                f"origin={origin} | "
-                f"base_domain={base_domain} | "
-                f"scripts_found={len(scripts)}"
-            )
-
-
-            for script_url in page.get("scripts", []):
-                if context.stats.scripts_parsed_ok >= context.stats.scripts_parse_limit:
-                    break
-
-                parsed = self.js_parser.parse(script_url, base_domain)
-                if not parsed:
-                    continue
-
-                context.stats.scripts_parsed_ok += 1
-
-                self.uow.crawler.insert_js_result(
-                    context.execution.ID,
-                    parsed["script_url"],
-                    parsed.get("emails", []),
-                    parsed.get("urls", [])
-                )
-
-                # Emails JS
-                for e in parsed.get("emails", []):
-                    email = normalize_email(e)
-
-                    if email:
-
-                        if self._is_new_email(email, context.seen_emails):
-
-                            self.uow.emails.insert_email(
-                                context.execution.ID,
-                                email,
-                                urlparse(script_url).netloc,
-                                technique=technique,
-                                source=script_url,
-                                context=" "
-                            )
-
-                # Credenciales JS
-                raw_js = parsed.get("raw", "")
-                creds = self.cred_parser.parse(raw_js, source=C.SOURCE_JS)
-
-                for ctype, value, source in creds:
-
-                    if self._is_new_credential(ctype, value, context.seen_creds):
-                        self.uow.credentials.insert_credential(
-                            context.execution.ID,
-                            ctype,
-                            value,
-                            technique=technique,
-                            source=script_url,
-                            context=" "
-                        )
-
-    def _run_file_parsing(self,context):
-        print("Parseando archivos descargables...")
-
-        for page in context.crawl_results:
-            origin = page.get("origin", "discovered")
-
-            for url in page.get("links", []):
-                print(f"[FILE] probando link: {url}")
-                result = self.file_parser.parse(url)
-
-                if not result:
-                    continue
-
-                text = result["text"]
-                technique = result["technique"]
-
-                print(
-                    f"[FILE] OK | technique={technique} | "
-                    f"text_len={len(text)}"
-                )
-
-                # Emails en archivos
-                emails = extract_emails_from_text(text)
-                for e in emails:
-                    email = normalize_email(e)
-                    if email and self._is_new_email(email, context.seen_emails):
-                        print(f"[FILE][EMAIL] {email}")
-                        self.uow.emails.insert_email(
-                            context.execution.ID,
-                            email,
-                            urlparse(url).netloc,
-                            technique=technique,
-                            source=url,
-                            context=origin
-                        )
-
-                # Credenciales en archivos
-                creds = self.cred_parser.parse(text, source=C.SOURCE_FILE)
-                for ctype, value, source in creds:
-                    if self._is_new_credential(ctype, value, context.seen_creds):
-                        self.uow.credentials.insert_credential(
-                            context.execution.ID,
-                            ctype,
-                            value,
-                            technique=technique,
-                            source=url,
-                            context=origin
-                        )
-
-    def _run_scraping(self, context):
-        print("Realizando scraping activo (solo live)...")
-
-        if not context.live_results:
-            print("[SCRAPING] No hay páginas LIVE, se omite scraping")
-            return
-
-        for page in context.live_results:
-            if "@" in page["url"]:
-                continue
-
-            context.stats.scrape_attempted += 1
-            result = self.scraper.scrape(page["url"])
-            if not result:
-                context.stats.scrape_failed += 1
-                continue
-
-            context.stats.scrape_succeeded += 1
-
-
-            for e in result["emails_dom"]:
-                email = normalize_email(e)
-                if email and self._is_new_email(email, context.seen_emails):
-                    self.uow.emails.insert_email(
-                        context.execution.ID,
-                        email,
-                        urlparse(page["url"]).hostname,
-                        technique=C.TECHNIQUE_SCRAPING_DOM,
-                        source=page["url"],
-                        context=" "
-                    )
-
-
-            for ctype, value, source in result["credentials_dom"]:
-                if self._is_new_credential(ctype, value, context.seen_creds):
-                    self.uow.credentials.insert_credential(
-                        context.execution.ID,
-                        ctype,
-                        value,
-                        technique=C.TECHNIQUE_SCRAPING_DOM,
-                        source=page["url"],
-                        context=" "
-                    )
-
-            for e in result["emails_json"]:
-                email = normalize_email(e)
-                if email and self._is_new_email(email, context.seen_emails):
-                    self.uow.emails.insert_email(
-                        context.execution.ID,
-                        email,
-                        urlparse(page["url"]).netloc,
-                        technique=C.TECHNIQUE_SCRAPING_JSON,
-                        source=page["url"],
-                        context=" "
-                    )
-
-
-            for ctype, value, source in result["credentials_json"]:
-                if self._is_new_credential(ctype, value, context.seen_creds):
-                    self.uow.credentials.insert_credential(
-                        context.execution.ID,
-                        ctype,
-                        value,
-                        technique=C.TECHNIQUE_SCRAPING_JSON,
-                        source=page["url"],
-                        context=" "
-                    )
-
 
     def run(self, execution, cfg):
 
@@ -733,35 +308,33 @@ class Orchestrator:
 
 
         if cfg["modules"]["crawler"]:
-            self._run_crawler(context)
-            self._process_crawl_results(context)
+            self.crawling_service.run(context)
+            self.crawler_processing_service.run(context)
 
         # -------------------------------------------------
         # 6. Parsing JS
         # -------------------------------------------------
 
         if cfg["modules"]["js_parsing"]:
-
-            print(f"[DEBUG] LIVE pages: {len(context.live_results)}")
-            print(f"[DEBUG] WAYBACK pages: {len(context.wayback_results)}")
-
-            self._run_js_parsing(context)
+            self.js_parsing_service.run(context)
 
         # -------------------------------------------------
         # 7. Parsing de archivos
         # -------------------------------------------------
 
         if cfg["modules"].get("file_parsing"):
-            self._run_file_parsing(context)
-
+            self.file_parsing_service.run(context)
         # -------------------------------------------------
         # 8. Scraping activo (SOLO LIVE)
         # -------------------------------------------------
 
         if cfg["modules"]["scraping"]:
-            self._run_scraping(context)
+            self.scraping_service.run(context)
 
         self.uow.metrics.insert_metrics(execution.ID)
-        metrics = self.uow.metrics.get_execution_metrics(execution.ID)
-        self._print_summary(metrics, context.stats)
+        self.print_debug_service.print_summary(
+            execution.ID,
+            context.stats
+        )
+
 
