@@ -2,61 +2,70 @@ class CrawlingService:
 
     def __init__(
         self,
-        crawler_cls,
         seed_discovery_service,
+        crawler_live_service,
         crawler_wayback_service,
-        live_timeout,
-        live_max_pages,
-        wayback_timeout,
-        wayback_max_pages,
+        crawler_processing_service,
     ):
-        self.crawler_cls = crawler_cls
         self.seed_discovery_service = seed_discovery_service
+        self.crawler_live_service = crawler_live_service
         self.crawler_wayback_service = crawler_wayback_service
-
-        self.live_timeout = live_timeout
-        self.live_max_pages = live_max_pages
-        self.wayback_timeout = wayback_timeout
-        self.wayback_max_pages = wayback_max_pages
+        self.crawler_processing_service = crawler_processing_service
 
     def run(self, context):
 
+        print("[CRAWLING] Iniciando pipeline de crawling")
+
+        # -----------------------------------------
+        # 1️⃣ Descubrimiento de seeds
+        # -----------------------------------------
+
         crawl_urls, sources = self.seed_discovery_service.get_seeds(context)
 
-        crawler_live = self.crawler_cls(
-            start_url=list(crawl_urls),
-            max_pages=self.live_max_pages,
-            timeout=self.live_timeout,
-            allowed_domain=context.execution.TARGET
+        print(f"[CRAWLING] Seeds totales descubiertas: {len(crawl_urls)}")
+
+        # -----------------------------------------
+        # 2️⃣ Crawler LIVE
+        # -----------------------------------------
+
+        live_results = self.crawler_live_service.run(
+            context,
+            crawl_urls,
+            sources
         )
 
-        live_results = crawler_live.collect()
+        context.stats.live_pages_visited = len(live_results)
 
-        for page in live_results:
-            page["origin"] = sources.get(page["url"], "live")
+        print(f"[CRAWLING] LIVE pages: {len(live_results)}")
 
-        # WAYBACK
+        # -----------------------------------------
+        # 3️⃣ Crawler WAYBACK
+        # -----------------------------------------
+
         wayback_results = []
 
         if context.cfg["modules"].get("wayback"):
 
-            wayback_urls = self.crawler_wayback_service.collect(context.execution.TARGET)
-            context.stats.wayback_urls_collected = len(wayback_urls)
+            wayback_results = self.crawler_wayback_service.run(context.execution.TARGET)
 
-            if wayback_urls:
-                crawler_wb = self.crawler_cls(
-                    start_url=[u["url"] for u in wayback_urls],
-                    max_pages=self.wayback_max_pages,
-                    timeout=self.wayback_timeout,
-                    allowed_domain=None
-                )
+            context.stats.wayback_pages_visited = len(wayback_results)
 
-                wayback_results = crawler_wb.collect()
-                for page in wayback_results:
-                    page["origin"] = "wayback"
+            print(f"[CRAWLING] WAYBACK pages: {len(wayback_results)}")
 
-                context.stats.wayback_pages_visited = len(wayback_results)
+        # -----------------------------------------
+        # 4️⃣ Unificación de resultados
+        # -----------------------------------------
 
         context.live_results = live_results
         context.wayback_results = wayback_results
         context.crawl_results = live_results + wayback_results
+
+        print(f"[CRAWLING] Total páginas acumuladas: {len(context.crawl_results)}")
+
+        # -----------------------------------------
+        # 5️⃣ Procesamiento
+        # -----------------------------------------
+
+        self.crawler_processing_service.run(context)
+
+        print("[CRAWLING] Procesamiento finalizado")

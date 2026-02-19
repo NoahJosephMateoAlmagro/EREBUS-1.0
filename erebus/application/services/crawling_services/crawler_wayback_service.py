@@ -32,7 +32,7 @@ class CrawlerWaybackService:
     def _build_snapshot_url(self, timestamp, original):
         return f"https://web.archive.org/web/{timestamp}/{original}"
 
-    def collect(self, domain: str):
+    def run(self, domain: str):
 
         print(f"[WAYBACK][SERVICE] Iniciando colección histórica para: {domain}")
         print(f"[WAYBACK][SERVICE] min_year={self.min_year} | limit={self.limit}")

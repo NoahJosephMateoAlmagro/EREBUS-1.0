@@ -32,7 +32,7 @@ APP_CONFIG = {
         # Wayback (CDX)
         "wayback_max_snapshots": 50,
         "wayback_min_year": 2000,
-        "cdx_url_limit":2000,
+        "cdx_url_limit":200,
 
         # JS
         "js_max_scripts": 15,

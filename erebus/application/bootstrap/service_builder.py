@@ -1,3 +1,4 @@
+from application.services.crawling_services.crawler_live_service import CrawlerLiveService
 from application.services.crawling_services.crawler_wayback_service import CrawlerWaybackService
 from collectors.passive.subdomains_Collector import SubdomainCollector
 from collectors.passive.whois_Collector import WhoisCollector
@@ -158,22 +159,25 @@ class ServiceBuilder:
             limit=int(cfg["limits"]["wayback_max_snapshots"]),
             min_year=int(cfg["limits"]["wayback_min_year"])
         )
-
-        crawling_service = CrawlingService(
+        crawler_live_service = CrawlerLiveService(
             crawler_cls=crawler_cls,
-            seed_discovery_service=seed_discovery_service,
-            crawler_wayback_service=crawler_wayback_service,
-            live_timeout=cfg["timeouts"]["crawler_live_page"],
-            live_max_pages=int(cfg["limits"]["crawler_live_max_pages"]),
-            wayback_timeout=cfg["timeouts"]["crawler_wayback_page"],
-            wayback_max_pages=int(cfg["limits"]["crawler_wayback_max_pages"]),
+            timeout=cfg["timeouts"]["crawler_live_page"],
+            max_pages=int(cfg["limits"]["crawler_live_max_pages"]),
         )
-
         crawler_processing_service = CrawlerProcessingService(
             uow,
             email_analyzer,
             cred_parser
         )
+
+        crawling_service = CrawlingService(
+            seed_discovery_service=seed_discovery_service,
+            crawler_live_service=crawler_live_service,
+            crawler_wayback_service=crawler_wayback_service,
+            crawler_processing_service=crawler_processing_service,
+        )
+
+
 
         js_parsing_service = JSParsingService(
             js_parser,
