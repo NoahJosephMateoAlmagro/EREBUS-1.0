@@ -2,9 +2,10 @@ import requests
 from collectors.base import PassiveCollector
 import shared.constants as C
 
+
 class SubdomainCollector(PassiveCollector):
 
-    def __init__(self, timeout : int = 8, limit: int=20):
+    def __init__(self, timeout: int = 8, limit: int = 20):
         self.timeout = timeout
         self.limit = limit
 
@@ -20,18 +21,19 @@ class SubdomainCollector(PassiveCollector):
                 return results
 
             data = response.json()
-
             subdomains = set()
 
             for entry in data:
                 name_value = entry.get("name_value", "")
                 for domain in name_value.split("\n"):
                     domain = domain.strip().lower()
+
                     if domain.endswith(target) and not domain.startswith("*."):
                         subdomains.add(domain)
 
             for sub in sorted(subdomains):
-                if len(results) - 1>= self.limit:
+
+                if len(results) >= self.limit:
                     break
 
                 results.append({
@@ -39,14 +41,10 @@ class SubdomainCollector(PassiveCollector):
                     "source": C.TECHNIQUE_SUBDOMAINS
                 })
 
-
-
         except requests.RequestException as e:
-
             print("Error HTTP obteniendo subdominios:", e)
 
         except ValueError as e:
-
             print("Error parseando JSON de crt.sh:", e)
 
         return results

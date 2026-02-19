@@ -4,7 +4,7 @@ class CrawlingService:
         self,
         crawler_cls,
         seed_discovery_service,
-        wayback_collector,
+        crawler_wayback_service,
         live_timeout,
         live_max_pages,
         wayback_timeout,
@@ -12,7 +12,7 @@ class CrawlingService:
     ):
         self.crawler_cls = crawler_cls
         self.seed_discovery_service = seed_discovery_service
-        self.wayback_collector = wayback_collector
+        self.crawler_wayback_service = crawler_wayback_service
 
         self.live_timeout = live_timeout
         self.live_max_pages = live_max_pages
@@ -40,7 +40,7 @@ class CrawlingService:
 
         if context.cfg["modules"].get("wayback"):
 
-            wayback_urls = self.wayback_collector.collect(context.execution.TARGET)
+            wayback_urls = self.crawler_wayback_service.collect(context.execution.TARGET)
             context.stats.wayback_urls_collected = len(wayback_urls)
 
             if wayback_urls:

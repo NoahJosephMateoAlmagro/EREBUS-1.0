@@ -1,16 +1,14 @@
 from urllib.parse import urlparse
 import shared.constants as C
-from processing.normalizers.email_normalizer import (
-    normalize_email,
-    extract_emails_from_text
-)
+
 
 
 class FileParsingService:
 
-    def __init__(self, file_parser, cred_parser, uow):
+    def __init__(self, file_parser, cred_parser, email_analyzer, uow):
         self.file_parser = file_parser
         self.cred_parser = cred_parser
+        self.email_analyzer = email_analyzer
         self.uow = uow
 
     # ----------------------------------------
@@ -56,11 +54,10 @@ class FileParsingService:
             self._process_credentials(context, text, url, technique, origin)
     def _process_emails(self, context, text, url, technique, origin):
 
-        emails = extract_emails_from_text(text)
+        emails = self.email_analyzer.extract_from_file_text(text)
 
         for e in emails:
-
-            email = normalize_email(e)
+            email = self.email_analyzer.normalize(e)
 
             if not email:
                 continue

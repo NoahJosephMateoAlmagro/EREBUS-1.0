@@ -1,17 +1,14 @@
-import re
-import requests
 from collectors.base import PassiveCollector
-from processing.normalizers.email_normalizer import normalize_obfuscated
+import requests
+
 
 class EmailCollector(PassiveCollector):
-    EMAIL_REGEX = re.compile(
-        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-    )
 
     def __init__(self, timeout: int = 8):
         self.timeout = timeout
 
     def collect(self, target: str):
+
         results = []
 
         urls = [
@@ -35,19 +32,12 @@ class EmailCollector(PassiveCollector):
                 if "text/html" not in response.headers.get("Content-Type", ""):
                     continue
 
-                matches = normalize_obfuscated(response.text)
-
-                for email in matches:
-                    results.append({
-                        "value": email,
-                        "context": url
-                    })
-
+                results.append({
+                    "url": url,
+                    "html": response.text
+                })
 
             except requests.exceptions.RequestException:
-                pass
+                continue
 
         return results
-
-
-

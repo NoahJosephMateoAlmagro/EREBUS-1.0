@@ -1,4 +1,3 @@
-from processing.normalizers.email_normalizer import normalize_obfuscated
 from urllib.parse import urlparse
 
 import requests
@@ -9,9 +8,16 @@ URL_REGEX = r"https?://[^\s\"']+"
 
 class JSParser:
 
-    def __init__(self, connect_timeout: int = 8, read_timeout: int = 8):
+    def __init__(
+        self,
+        email_analyzer,
+        connect_timeout: int = 8,
+        read_timeout: int = 8
+    ):
+        self.email_analyzer = email_analyzer
         self.connect_timeout = connect_timeout
         self.read_timeout = read_timeout
+
 
     def _is_external(self, script_url, base_domain):
         netloc = urlparse(script_url).netloc.lower().split(":")[0]
@@ -41,7 +47,7 @@ class JSParser:
 
             content = r.text
 
-            emails = normalize_obfuscated(content)
+            emails = self.email_analyzer.extract(content)
             urls = set(re.findall(URL_REGEX, content))  # endpoints / APIs
 
             return {

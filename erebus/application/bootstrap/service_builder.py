@@ -1,3 +1,4 @@
+from application.services.crawling_services.crawler_wayback_service import CrawlerWaybackService
 from collectors.passive.subdomains_Collector import SubdomainCollector
 from collectors.passive.whois_Collector import WhoisCollector
 from collectors.active.emails_Collector import EmailCollector
@@ -19,8 +20,8 @@ from processing.parsers.file_parser.file_parser import FileParser
 from processing.parsers.file_parser.txt_parser import TxtParser
 from processing.parsers.file_parser.pdf_parser import PdfParser
 from processing.parsers.file_parser.xml_parser import XmlParser
-from processing.normalizers.email_normalizer import normalize_email
-from processing.normalizers.email_normalizer import normalize_obfuscated
+from processing.normalizers.email_normalizer import EmailAnalyzer
+
 
 from application.services.subdomain_service import SubdomainService
 from application.services.whois_service import WhoisService
@@ -51,6 +52,7 @@ class ServiceBuilder:
 
         cfg = self.cfg
         uow = self.uow
+        email_analyzer = EmailAnalyzer()
 
         # ---------- Collectors ----------
 
@@ -82,7 +84,7 @@ class ServiceBuilder:
         )
 
         email_collector = EmailCollector(
-            timeout=cfg["timeouts"]["http_passive_email"]
+            timeout=cfg["timeouts"]["http_passive_email"],
         )
 
         robots_collector = RobotsCollector(
@@ -96,9 +98,7 @@ class ServiceBuilder:
 
         wayback_collector = WaybackCollector(
             timeout=cfg["timeouts"]["wayback_cdx_api"],
-            limit=int(cfg["limits"]["wayback_max_snapshots"]),
-            cdx_limit=int(cfg["limits"]["cdx_url_limit"]),
-            min_year=int(cfg["limits"]["wayback_min_year"])
+            cdx_limit=int(cfg["limits"]["cdx_url_limit"])
         )
 
         http_headers_collector = HttpHeadersCollector(
@@ -108,6 +108,7 @@ class ServiceBuilder:
         crawler_cls = Crawler
 
         js_parser = JSParser(
+            email_analyzer=email_analyzer,
             connect_timeout=cfg["timeouts"]["js_connect"],
             read_timeout=cfg["timeouts"]["js_read"]
         )
@@ -136,8 +137,8 @@ class ServiceBuilder:
 
         email_passive_service = EmailPassiveService(
             email_collector,
-            uow,
-            normalize_email
+            email_analyzer,
+            uow
         )
 
         dns_service = DNSService(
@@ -152,10 +153,16 @@ class ServiceBuilder:
             sitemap_collector=sitemap_collector
         )
 
+        crawler_wayback_service = CrawlerWaybackService(
+            wayback_collector=wayback_collector,
+            limit=int(cfg["limits"]["wayback_max_snapshots"]),
+            min_year=int(cfg["limits"]["wayback_min_year"])
+        )
+
         crawling_service = CrawlingService(
             crawler_cls=crawler_cls,
             seed_discovery_service=seed_discovery_service,
-            wayback_collector=wayback_collector,
+            crawler_wayback_service=crawler_wayback_service,
             live_timeout=cfg["timeouts"]["crawler_live_page"],
             live_max_pages=int(cfg["limits"]["crawler_live_max_pages"]),
             wayback_timeout=cfg["timeouts"]["crawler_wayback_page"],
@@ -163,15 +170,32 @@ class ServiceBuilder:
         )
 
         crawler_processing_service = CrawlerProcessingService(
-            self.uow,
-            normalize_obfuscated,
-            cred_parser,
-            normalize_email
+            uow,
+            email_analyzer,
+            cred_parser
         )
 
-        js_parsing_service = JSParsingService(js_parser, cred_parser, uow)
-        file_parsing_service = FileParsingService(file_parser, cred_parser, uow)
-        scraping_service = ScrapingService(scraper, cred_parser, uow)
+        js_parsing_service = JSParsingService(
+            js_parser,
+            cred_parser,
+            email_analyzer,
+            uow
+        )
+
+        file_parsing_service = FileParsingService(
+            file_parser,
+            cred_parser,
+            email_analyzer,
+            uow
+        )
+
+        scraping_service = ScrapingService(
+            scraper,
+            cred_parser,
+            email_analyzer,
+            uow
+        )
+
         print_debug_service = PrintDebugService(uow)
 
         return {

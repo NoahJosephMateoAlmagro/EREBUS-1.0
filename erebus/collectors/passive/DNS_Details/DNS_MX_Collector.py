@@ -13,7 +13,7 @@ class DNS_MX_Collector(PassiveCollector):
         results = []
 
         try:
-            answers = dns.resolver.resolve(domain, "MX")
+            answers = self.resolver.resolve(domain, "MX")
 
             for rdata in answers:
                 results.append({
@@ -25,7 +25,9 @@ class DNS_MX_Collector(PassiveCollector):
 
         except (dns.resolver.NoAnswer,
                 dns.resolver.NXDOMAIN,
-                dns.resolver.Timeout):
+                dns.resolver.Timeout,
+                dns.resolver.NoNameservers
+                ):
             pass
 
         except Exception:

@@ -1,18 +1,14 @@
 from urllib.parse import urlparse
 import shared.constants as C
-from processing.normalizers.email_normalizer import normalize_email
 
 
 class ScrapingService:
 
-    def __init__(self, scraper, cred_parser, uow):
+    def __init__(self, scraper, cred_parser, email_analyzer, uow):
         self.scraper = scraper
         self.cred_parser = cred_parser
+        self.email_analyzer = email_analyzer
         self.uow = uow
-
-    # ----------------------------------------
-    # Public API
-    # ----------------------------------------
 
     def run(self, context):
 
@@ -29,7 +25,7 @@ class ScrapingService:
 
             context.stats.scrape_attempted += 1
 
-            result = self.scraper.scrape(page["url"])
+            result = self.scraper.collect(page["url"])
 
             if not result:
                 context.stats.scrape_failed += 1
@@ -37,65 +33,84 @@ class ScrapingService:
 
             context.stats.scrape_succeeded += 1
 
-            self._process_dom(context, page, result)
-            self._process_json(context, page, result)
+            self._process(context, page, result)
 
-    # ----------------------------------------
-    # Internal
-    # ----------------------------------------
+    def _process(self, context, page, result):
 
-    def _process_dom(self, context, page, result):
+        html = result.get("html", "")
+        json_texts = result.get("json_texts", [])
+        json_objects = result.get("json_objects", [])
 
-        for e in result.get("emails_dom", []):
+        final_url = result.get("final_url") or page["url"]
+        domain = urlparse(final_url).hostname
 
-            email = normalize_email(e)
+        # -------------------
+        # DOM parsing
+        # -------------------
+
+        emails_dom = self.email_analyzer.extract(html)
+
+        for e in emails_dom:
+            email = self.email_analyzer.normalize(e)
 
             if email and context.is_new_email(email):
-
                 self.uow.emails.insert_email(
                     context.execution.ID,
                     email,
-                    urlparse(page["url"]).hostname,
+                    domain,
                     technique=C.TECHNIQUE_SCRAPING_DOM,
-                    source=page["url"],
+                    source=final_url,
                     context=" "
                 )
-        for ctype, value, source in result.get("credentials_dom", []):
 
+        creds_dom = self.cred_parser.parse(
+            html,
+            source=C.SOURCE_HTML
+        )
+
+        for ctype, value, source in creds_dom:
             if context.is_new_credential(ctype, value):
                 self.uow.credentials.insert_credential(
                     context.execution.ID,
                     ctype,
                     value,
                     technique=C.TECHNIQUE_SCRAPING_DOM,
-                    source=page["url"],
+                    source=final_url,
                     context=" "
                 )
 
-    def _process_json(self, context, page, result):
+        # -------------------
+        # JSON parsing
+        # -------------------
 
-        for e in result.get("emails_json", []):
+        full_json_text = "\n".join(json_texts)
+        emails_json = self.email_analyzer.extract(full_json_text)
 
-            email = normalize_email(e)
-
+        for e in emails_json:
+            email = self.email_analyzer.normalize(e)
             if email and context.is_new_email(email):
                 self.uow.emails.insert_email(
                     context.execution.ID,
                     email,
-                    urlparse(page["url"]).netloc,
+                    domain,
                     technique=C.TECHNIQUE_SCRAPING_JSON,
                     source=page["url"],
                     context=" "
                 )
 
-        for ctype, value, source in result.get("credentials_json", []):
+        for obj in json_objects:
+            creds_json = self.cred_parser.parse_json(
+                obj,
+                source=C.SOURCE_JSON
+            )
 
-            if context.is_new_credential(ctype, value):
-                self.uow.credentials.insert_credential(
-                    context.execution.ID,
-                    ctype,
-                    value,
-                    technique=C.TECHNIQUE_SCRAPING_JSON,
-                    source=page["url"],
-                    context=" "
-                )
+            for ctype, value, source in creds_json:
+                if context.is_new_credential(ctype, value):
+                    self.uow.credentials.insert_credential(
+                        context.execution.ID,
+                        ctype,
+                        value,
+                        technique=C.TECHNIQUE_SCRAPING_JSON,
+                        source=page["url"],
+                        context=" "
+                    )

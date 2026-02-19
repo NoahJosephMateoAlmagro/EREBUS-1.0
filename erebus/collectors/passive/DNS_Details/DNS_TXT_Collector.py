@@ -11,12 +11,14 @@ class DNS_TXT_Collector(PassiveCollector):
         self.resolver.timeout = timeout
 
     def collect(self, domain: str):
+
         results = []
 
         try:
-            answers = dns.resolver.resolve(domain, "TXT")
+            answers = self.resolver.resolve(domain, "TXT")
 
             for rdata in answers:
+
                 value = "".join(
                     part.decode() if isinstance(part, bytes) else part
                     for part in rdata.strings
@@ -24,16 +26,19 @@ class DNS_TXT_Collector(PassiveCollector):
 
                 results.append({
                     "domain": domain,
-                    "value": value,
+                    "record": value,
+                    "type": "TXT",
                     "source": C.TECHNIQUE_DNS_TXT
                 })
 
-        except (dns.resolver.NoAnswer,
-                dns.resolver.NXDOMAIN,
-                dns.resolver.Timeout):
+        except (
+            dns.resolver.NoAnswer,
+            dns.resolver.NXDOMAIN,
+            dns.resolver.Timeout
+        ):
             pass
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[DNS][TXT] Error {domain} -> {e}")
 
         return results

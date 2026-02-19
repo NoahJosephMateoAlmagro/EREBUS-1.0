@@ -122,80 +122,21 @@ un diseño limpio y justificable para un proyecto académico.
 class WaybackCollector:
 
     CDX_URL = "https://web.archive.org/cdx/search/cdx"
-    name = "wayback"
 
-    BAD_EXTENSIONS = (
-        ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-        ".woff", ".woff2", ".ttf", ".eot",
-        ".zip", ".rar", ".7z"
-    )
-
-    def __init__(self, timeout=10, limit=50, cdx_limit = 2000,min_year=2008):
+    def __init__(self, timeout=10, cdx_limit=2000):
         self.timeout = timeout
-        self.limit = limit
         self.cdx_limit = cdx_limit
-        self.min_year = min_year
-
-    def _is_valid_html_url(self, url: str) -> bool:
-        url = url.lower()
-
-        if ",a.media" in url or ".pagespeed." in url:
-            return False
-
-        parsed = urlparse(url)
-
-        if not parsed.scheme.startswith("http"):
-            return False
-
-        for ext in self.BAD_EXTENSIONS:
-            if parsed.path.endswith(ext):
-                return False
-
-        return True
-
-    def _build_snapshot_url(self, timestamp, original):
-        return f"https://web.archive.org/web/{timestamp}/{original}"
-
-    def _select_snapshots(self, entries):
-        """
-        Selecciona snapshots representativos:
-        - primero
-        - último
-        """
-        entries = sorted(entries, key=lambda x: x["timestamp"])
-        first = entries[0]
-        last = entries[-1]
-
-        print(
-            f"[WAYBACK][DEBUG] Selección snapshots → "
-            f"{first['timestamp']} / {last['timestamp']}"
-        )
-
-        snapshots = {first["snapshot"], last["snapshot"]}
-        return list(snapshots)
 
     def collect(self, domain: str):
-        """
-        Devuelve URLs históricas distintas con snapshots representativos
-        """
-        urls = defaultdict(list)
-        results = []
 
         params = {
-            "url": f"*.{domain}/*",
+            "url": f"{domain}/*",
             "output": "json",
             "fl": "timestamp,original,statuscode",
-            "filter": "statuscode:200",
-            "limit": self.cdx_limit,
-            "collapse": "digest"
+            "limit": self.cdx_limit
         }
 
         try:
-            print(
-                f"[WAYBACK][DEBUG] CDX query → "
-                f"domain={domain} limit={self.cdx_limit} timeout={self.timeout}s"
-            )
-
             r = requests.get(
                 self.CDX_URL,
                 params=params,
@@ -203,63 +144,25 @@ class WaybackCollector:
                 headers={"User-Agent": "EREBUS/1.0"}
             )
 
-            if r.status_code in (502, 503, 504):
-                print("[WAYBACK] API caída")
-                return results
+            print("[WAYBACK][COLLECTOR] Request URL:", r.url)
+            print("[WAYBACK][COLLECTOR] Status:", r.status_code)
 
             if r.status_code != 200:
-                return results
+                return []
 
             data = r.json()
 
-            # Saltar cabecera
-            for row in data[1:]:
-                timestamp, original, status = row
-                year = int(timestamp[:4])
+            print("[WAYBACK][COLLECTOR] Rows received:", len(data))
 
-                if status != "200":
-                    continue
-                if year < self.min_year:
-                    continue
-                if not self._is_valid_html_url(original):
-                    continue
-
-                urls[original].append({
-                    "timestamp": timestamp,
-                    "year": year,
-                    "snapshot": self._build_snapshot_url(timestamp, original)
-                })
-
-            # Limitar a URLs distintas
-            for original in list(urls.keys())[:self.limit]:
-                entries = urls[original]
-
-                snapshots = self._select_snapshots(entries)
-
-                for snapshot in snapshots:
-                    results.append({
-                        "url": snapshot,
-                        "source": "wayback"
-                    })
-
-            for i, original in enumerate(list(urls.keys())[:self.limit], start=1):
-                entries = urls[original]
-                print(
-                    f"[WAYBACK][DEBUG] ({i}) {original} "
-                    f"→ snapshots totales: {len(entries)}"
-                )
-
-            print(f"[WAYBACK][DEBUG] URLs únicas detectadas: {len(urls)}")
-
-        except requests.exceptions.ReadTimeout:
-            print("[WAYBACK] Timeout alcanzado consultando CDX")
-            return results
-
-        except requests.exceptions.RequestException as e:
-            print(f"[WAYBACK] Error de conexión: {e}")
+            return [
+                {
+                    "timestamp": row[0],
+                    "original": row[1],
+                    "status": row[2]
+                }
+                for row in data[1:]
+            ]
 
         except Exception as e:
-            print(f"[WAYBACK] Error inesperado: {e}")
-
-        return results
-
+            print("[WAYBACK][COLLECTOR] Error:", e)
+            return []

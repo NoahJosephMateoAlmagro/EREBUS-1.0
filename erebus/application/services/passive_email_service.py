@@ -1,36 +1,42 @@
 import shared.constants as C
-from processing.normalizers.email_normalizer import normalize_email
+
 
 class EmailPassiveService:
 
-    def __init__(self, email_collector, uow, normalize_email_func):
+    def __init__(self, email_collector, email_analyzer, uow):
         self.email_collector = email_collector
+        self.email_analyzer = email_analyzer
         self.uow = uow
-        self.normalize_email = normalize_email_func
 
     def run(self, context):
 
         print("Buscando emails pasivos...")
 
-        email_results = self.email_collector.collect(
+        pages = self.email_collector.collect(
             context.execution.TARGET
         )
 
-        for r in email_results:
+        for page in pages:
 
-            email = self.normalize_email(r.get("value"))
+            html = page.get("html", "")
+            source_url = page.get("url")
 
-            if not email:
-                continue
+            emails = self.email_analyzer.extract(html)
 
-            if context.is_new_email(email):
-                context.seen_emails.add(email)
+            for e in emails:
 
-                self.uow.emails.insert_email(
-                    context.execution.ID,
-                    email,
-                    context.execution.TARGET,
-                    technique=C.TECHNIQUE_PASSIVE_HTML,
-                    source=r.get("context"),
-                    context=r.get("context")
-                )
+                email = self.email_analyzer.normalize(e)
+
+                if not email:
+                    continue
+
+                if context.is_new_email(email):
+
+                    self.uow.emails.insert_email(
+                        context.execution.ID,
+                        email,
+                        context.execution.TARGET,
+                        technique=C.TECHNIQUE_PASSIVE_HTML,
+                        source=source_url,
+                        context=source_url
+                    )

@@ -4,11 +4,11 @@ import shared.constants as C
 
 class CrawlerProcessingService:
 
-    def __init__(self, uow, email_extractor_func, cred_parser, normalize_email_func):
+    def __init__(self, uow, email_analyzer, cred_parser):
         self.uow = uow
-        self.extract_emails = email_extractor_func
+        self.email_analyzer = email_analyzer
         self.cred_parser = cred_parser
-        self.normalize_email = normalize_email_func
+
 
     def run(self, context):
         for page in context.crawl_results:
@@ -41,10 +41,11 @@ class CrawlerProcessingService:
         # 2️⃣ Emails (parseados aquí)
         # -----------------------------------------
 
-        extracted_emails = self.extract_emails(html)
+        extracted_emails = self.email_analyzer.extract(html)
 
         for e in extracted_emails:
-            email = self.normalize_email(e)
+            email = self.email_analyzer.normalize(e)
+
             if not email:
                 continue
 

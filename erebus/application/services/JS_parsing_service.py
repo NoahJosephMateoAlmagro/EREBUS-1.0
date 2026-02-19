@@ -1,14 +1,15 @@
 from urllib.parse import urlparse
 import shared.constants as C
-from processing.normalizers.email_normalizer import normalize_email
 
 
 class JSParsingService:
 
-    def __init__(self, js_parser, cred_parser, uow):
+    def __init__(self, js_parser, cred_parser, email_analyzer, uow):
         self.js_parser = js_parser
         self.cred_parser = cred_parser
+        self.email_analyzer = email_analyzer
         self.uow = uow
+
 
     # ----------------------------------------
     # Public API
@@ -86,7 +87,7 @@ class JSParsingService:
     def _process_emails(self, context, parsed, script_url, technique):
 
         for e in parsed.get("emails", []):
-            email = normalize_email(e)
+            email = self.email_analyzer.normalize(e)
 
             if not email:
                 continue
