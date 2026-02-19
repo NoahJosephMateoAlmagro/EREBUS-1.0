@@ -1,8 +1,7 @@
 import re
 import requests
 from collectors.base import PassiveCollector
-import shared.constants as C
-
+from processing.normalizers.email_normalizer import normalize_obfuscated
 
 class EmailCollector(PassiveCollector):
     EMAIL_REGEX = re.compile(
@@ -33,13 +32,14 @@ class EmailCollector(PassiveCollector):
                 if response.status_code != 200:
                     continue
 
-                matches = self.EMAIL_REGEX.findall(response.text)
+                if "text/html" not in response.headers.get("Content-Type", ""):
+                    continue
 
+                matches = normalize_obfuscated(response.text)
 
                 for email in matches:
                     results.append({
                         "value": email,
-                        "source": C.TECHNIQUE_PASSIVE_HTML,
                         "context": url
                     })
 

@@ -1,25 +1,24 @@
 from typing import Union, List
-
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-from processing.normalizers.email_normalizer import normalize_obfuscated
-import re
-
-EMAIL_REGEX = re.compile(
-    r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-)
 
 
 class Crawler:
 
-    def __init__(self, start_url: Union[str, List[str]], max_pages: int = 30, timeout: int = 8, allowed_domain=None, sources: dict | None = None):
+    def __init__(
+        self,
+        start_url: Union[str, List[str]],
+        max_pages: int = 30,
+        timeout: int = 8,
+        allowed_domain: str | None = None
+    ):
         self.max_pages = max_pages
         self.timeout = timeout
+        self.allowed_domain = allowed_domain
+
         self.visited = set()
         self.queue = []
-        self.allowed_domain = allowed_domain
-        self.sources = sources or {}
 
         if isinstance(start_url, list):
             self.queue.extend(start_url)
@@ -30,8 +29,16 @@ class Crawler:
 
         self.domain = urlparse(first).netloc if first else ""
 
+        print(f"[CRAWLER] Inicializado para dominio: {self.domain}")
+        print(f"[CRAWLER] Seeds iniciales: {len(self.queue)}")
+        print(f"[CRAWLER] Límite de páginas: {self.max_pages}")
 
-    def _is_internal(self, url):
+
+    def _normalize(self, url: str) -> str:
+        return url.split("#")[0].rstrip("/")
+
+
+    def _is_internal(self, url: str) -> bool:
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
@@ -41,50 +48,31 @@ class Crawler:
         if ":" in netloc:
             netloc = netloc.split(":")[0]
 
-        # PERMITIR WAYBACK
-        if "web.archive.org" in netloc:
-            return True
-
         if self.allowed_domain:
             return (
-                    netloc == self.allowed_domain
-                    or netloc.endswith("." + self.allowed_domain)
+                netloc == self.allowed_domain
+                or netloc.endswith("." + self.allowed_domain)
             )
 
         return netloc == self.domain
 
-    def _normalize(self, url):
-        return url.split("#")[0].rstrip("/")
 
-    def run(self):
+    def collect(self):
         results = []
 
+        print("[CRAWLER] Iniciando crawling...")
+
         while self.queue and len(self.visited) < self.max_pages:
+
+            print(f"\n[CRAWLER] Cola: {len(self.queue)} | Visitadas: {len(self.visited)}")
+
             url = self._normalize(self.queue.pop(0))
-            origin = self.sources.get(url, "discovered")
 
             if url in self.visited:
+                print(f"[CRAWLER] ⚠ Ya visitada: {url}")
                 continue
 
-            # Detectar emails embebidos en la URL (ANTES del GET)
-            page_emails = set()
-            page_emails |= normalize_obfuscated(url)
-
-            # Si la URL contiene '@', NO es crawlable
-            if "@" in url:
-                self.visited.add(url)
-
-                if page_emails:
-                    results.append({
-                        "url": url,
-                        "emails": list(page_emails),
-                        "links": [],
-                        "scripts": [],
-                        "raw_html": "",
-                        "origin": origin
-                    })
-
-                continue
+            print(f"[CRAWLER] ➡ Visitando: {url}")
 
             try:
                 response = requests.get(
@@ -93,37 +81,28 @@ class Crawler:
                     headers={"User-Agent": "EREBUS/1.0"}
                 )
 
-                if "text/html" not in response.headers.get("Content-Type", ""):
+                status = response.status_code
+                print(f"[CRAWLER] Status: {status}")
+
+                content_type = response.headers.get("Content-Type", "")
+                print(f"[CRAWLER] Content-Type: {content_type}")
+
+                if "text/html" not in content_type:
+                    print(f"[CRAWLER] ❌ No es HTML, se omite.")
                     continue
-
-                #-------------------------------------------------------------------
-                if origin == "sitemap":
-                    print(f"[CRAWLER][SITEMAP] Analizando página: {url}")
-                elif origin == "robots":
-                    print(f"[CRAWLER][ROBOTS] Analizando página: {url}")
-                #-------------------------------------------------------------------
-
 
                 self.visited.add(url)
 
                 soup = BeautifulSoup(response.text, "html.parser")
 
-                # Emails SOLO de esta página
-                page_emails |= normalize_obfuscated(soup.get_text())
-                page_emails |= normalize_obfuscated(response.text)
-
                 links = set()
-
                 for a in soup.find_all("a", href=True):
                     href = a["href"]
 
-                    # Si contiene @, NO es una URL web válida (mailto, urls rotas...)
                     if "@" in href:
                         continue
 
-                    full_url = self._normalize(
-                        urljoin(url, href)
-                    )
+                    full_url = self._normalize(urljoin(url, href))
 
                     if self._is_internal(full_url):
                         links.add(full_url)
@@ -131,28 +110,29 @@ class Crawler:
                         if full_url not in self.visited:
                             self.queue.append(full_url)
 
-                            # heredar origen si no existe ( #Las urls derivadas de sitemap se cuentan como sitemap)
-                            if full_url not in self.sources:
-                                self.sources[full_url] = origin
+                print(f"[CRAWLER] ✔ Links internos encontrados: {len(links)}")
 
                 scripts = set()
                 for s in soup.find_all("script", src=True):
-                    full = self._normalize(
-                        urljoin(url, s["src"])
-                    )
+                    full = self._normalize(urljoin(url, s["src"]))
                     if self._is_internal(full):
                         scripts.add(full)
 
+                print(f"[CRAWLER] ✔ Scripts internos encontrados: {len(scripts)}")
+
                 results.append({
                     "url": url,
-                    "emails": list(page_emails),
+                    "html": response.text,
                     "links": list(links),
-                    "scripts": list(scripts),
-                    "raw_html": response.text,
-                    "origin": origin
+                    "scripts": list(scripts)
                 })
 
             except Exception as e:
                 print(f"[CRAWLER ERROR] {url} -> {e}")
+                continue
+
+        print("\n[CRAWLER] Finalizado.")
+        print(f"[CRAWLER] Total páginas visitadas: {len(self.visited)}")
+        print(f"[CRAWLER] Total resultados devueltos: {len(results)}")
 
         return results

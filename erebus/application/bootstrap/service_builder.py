@@ -20,6 +20,7 @@ from processing.parsers.file_parser.txt_parser import TxtParser
 from processing.parsers.file_parser.pdf_parser import PdfParser
 from processing.parsers.file_parser.xml_parser import XmlParser
 from processing.normalizers.email_normalizer import normalize_email
+from processing.normalizers.email_normalizer import normalize_obfuscated
 
 from application.services.subdomain_service import SubdomainService
 from application.services.whois_service import WhoisService
@@ -133,7 +134,11 @@ class ServiceBuilder:
 
         whois_service = WhoisService(whois_collector, uow)
 
-        email_passive_service = EmailPassiveService(email_collector, uow)
+        email_passive_service = EmailPassiveService(
+            email_collector,
+            uow,
+            normalize_email
+        )
 
         dns_service = DNSService(
             context_service=DNSContextService(dns_mx_collector, dns_txt_collector, uow),
@@ -158,9 +163,10 @@ class ServiceBuilder:
         )
 
         crawler_processing_service = CrawlerProcessingService(
-            uow=uow,
-            cred_parser=cred_parser,
-            normalize_email_func=normalize_email
+            self.uow,
+            normalize_obfuscated,
+            cred_parser,
+            normalize_email
         )
 
         js_parsing_service = JSParsingService(js_parser, cred_parser, uow)

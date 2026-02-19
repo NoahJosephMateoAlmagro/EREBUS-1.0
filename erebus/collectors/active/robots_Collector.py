@@ -13,27 +13,90 @@ class RobotsCollector(PassiveCollector):
             "sitemaps": []
         }
 
-        url = f"https://{domain}/robots.txt"
+        print(f"[ROBOTS] Analizando dominio: {domain}")
 
-        try:
-            r = requests.get(url, timeout=self.timeout)
-            if r.status_code != 200:
-                return results
+        # Intentamos HTTPS primero, luego HTTP
+        urls_to_try = [
+            f"https://{domain}/robots.txt",
+            f"http://{domain}/robots.txt"
+        ]
 
-            for line in r.text.splitlines():
-                line = line.strip()
+        content = None
 
-                if line.lower().startswith("disallow:"):
-                    path = line.split(":", 1)[1].strip()
-                    if path:
-                        results["paths"].append(path)
+        for url in urls_to_try:
+            print(f"[ROBOTS] Intentando: {url}")
 
-                elif line.lower().startswith("sitemap:"):
-                    sitemap = line.split(":", 1)[1].strip()
-                    if sitemap:
-                        results["sitemaps"].append(sitemap)
+            try:
+                r = requests.get(
+                    url,
+                    timeout=self.timeout,
+                    headers={"User-Agent": "EREBUS/1.0"}
+                )
 
-        except requests.RequestException:
-            pass
+                print(f"[ROBOTS] Status: {r.status_code}")
+
+                if r.status_code == 200 and r.text:
+                    print(f"[ROBOTS] ✔ robots.txt encontrado en {url}")
+                    content = r.text
+                    break
+                else:
+                    print(f"[ROBOTS] ❌ No válido o vacío.")
+
+            except requests.RequestException as e:
+                print(f"[ROBOTS ERROR] {url} -> {e}")
+
+        if not content:
+            print("[ROBOTS] ❌ No se encontró robots.txt")
+            return results
+
+        seen_paths = set()
+        seen_sitemaps = set()
+
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+
+            if not line or line.startswith("#"):
+                continue
+
+            # Eliminamos comentarios inline
+            if "#" in line:
+                line = line.split("#", 1)[0].strip()
+
+            lower = line.lower()
+
+            # -------------------------
+            # Disallow
+            # -------------------------
+            if lower.startswith("disallow:"):
+                path = line.split(":", 1)[1].strip()
+
+                if not path:
+                    continue
+
+                if not path.startswith("/"):
+                    print(f"[ROBOTS] ⚠ Ignorado path no estructural: {path}")
+                    continue
+
+                if path not in seen_paths:
+                    seen_paths.add(path)
+                    results["paths"].append(path)
+                    print(f"[ROBOTS] ➕ Path añadido: {path}")
+
+            # -------------------------
+            # Sitemap
+            # -------------------------
+            elif lower.startswith("sitemap:"):
+                sitemap = line.split(":", 1)[1].strip()
+
+                if not sitemap:
+                    continue
+
+                if sitemap not in seen_sitemaps:
+                    seen_sitemaps.add(sitemap)
+                    results["sitemaps"].append(sitemap)
+                    print(f"[ROBOTS] ➕ Sitemap añadido: {sitemap}")
+
+        print(f"[ROBOTS] Total paths: {len(results['paths'])}")
+        print(f"[ROBOTS] Total sitemaps: {len(results['sitemaps'])}")
 
         return results

@@ -3,9 +3,10 @@ from processing.normalizers.email_normalizer import normalize_email
 
 class EmailPassiveService:
 
-    def __init__(self, email_collector, uow):
+    def __init__(self, email_collector, uow, normalize_email_func):
         self.email_collector = email_collector
         self.uow = uow
+        self.normalize_email = normalize_email_func
 
     def run(self, context):
 
@@ -17,11 +18,12 @@ class EmailPassiveService:
 
         for r in email_results:
 
-            email = normalize_email(r.get("value"))
+            email = self.normalize_email(r.get("value"))
+
             if not email:
                 continue
 
-            if email not in context.seen_emails:
+            if context.is_new_email(email):
                 context.seen_emails.add(email)
 
                 self.uow.emails.insert_email(

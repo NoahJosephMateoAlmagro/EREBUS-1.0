@@ -19,49 +19,26 @@ class CrawlingService:
         self.wayback_timeout = wayback_timeout
         self.wayback_max_pages = wayback_max_pages
 
-
     def run(self, context):
 
-        # 1️⃣ Obtener seeds desde servicio externo
         crawl_urls, sources = self.seed_discovery_service.get_seeds(context)
 
-        # -------------------------
-        # LIVE CRAWLER
-        # -------------------------
         crawler_live = self.crawler_cls(
             start_url=list(crawl_urls),
             max_pages=self.live_max_pages,
             timeout=self.live_timeout,
-            allowed_domain=context.execution.TARGET,
-            sources=sources
+            allowed_domain=context.execution.TARGET
         )
 
-        print("Buscando emails mediante crawler (live + wayback)...")
-
-        live_results = crawler_live.run()
-        context.stats.live_pages_visited = len(live_results)
-
-        context.stats.visited_from_robots = 0
-        context.stats.visited_from_sitemap = 0
-        context.stats.visited_discovered = 0
+        live_results = crawler_live.collect()
 
         for page in live_results:
-            origin = page.get("origin", "discovered")
+            page["origin"] = sources.get(page["url"], "live")
 
-            if origin == "robots":
-                context.stats.visited_from_robots += 1
-            elif origin == "sitemap":
-                context.stats.visited_from_sitemap += 1
-            else:
-                context.stats.visited_discovered += 1
-
-        # -------------------------
         # WAYBACK
-        # -------------------------
         wayback_results = []
 
         if context.cfg["modules"].get("wayback"):
-            print("Recolectando URLs históricas desde Wayback Machine...")
 
             wayback_urls = self.wayback_collector.collect(context.execution.TARGET)
             context.stats.wayback_urls_collected = len(wayback_urls)
@@ -74,11 +51,11 @@ class CrawlingService:
                     allowed_domain=None
                 )
 
-                wayback_results = crawler_wb.run()
-                context.stats.wayback_pages_visited = len(wayback_results)
-
+                wayback_results = crawler_wb.collect()
                 for page in wayback_results:
                     page["origin"] = "wayback"
+
+                context.stats.wayback_pages_visited = len(wayback_results)
 
         context.live_results = live_results
         context.wayback_results = wayback_results
