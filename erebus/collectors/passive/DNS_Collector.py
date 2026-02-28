@@ -6,7 +6,7 @@ import shared.constants as C
 class DNSCollector(PassiveCollector):
 
     def __init__(self, timeout: int = 8):
-        self.resolver = dns.resolver.Resolver()
+        self.resolver = dns.resolver.Resolver(configure=False)
         self.resolver.lifetime = timeout
         self.resolver.timeout = timeout
         self.resolver.nameservers = ["8.8.8.8", "1.1.1.1"]

@@ -48,7 +48,7 @@ APP_CONFIG = {
         "http_headers": 5,
 
         # DNS
-        "dns_resolution": 5,
+        "dns_resolution": 15,
 
         # Crawler (requests)
 

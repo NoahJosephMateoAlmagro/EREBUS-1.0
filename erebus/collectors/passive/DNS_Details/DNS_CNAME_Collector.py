@@ -8,6 +8,7 @@ class DNS_CNAME_Collector(PassiveCollector):
     def __init__(self, timeout: int):
         self.timeout = timeout
 
+
     def collect(self, domain: str):
 
         results = []
@@ -19,7 +20,7 @@ class DNS_CNAME_Collector(PassiveCollector):
             resolver.timeout = self.timeout
             resolver.lifetime = self.timeout
 
-            answers = resolver.resolve(domain, "CNAME")
+            answers = resolver.resolve(domain, "CNAME", tcp=True)
 
             for data in answers:
                 cname = str(data.target).rstrip(".").lower()

@@ -1,4 +1,3 @@
-from processing.normalizers.email_normalizer import normalize_obfuscated
 
 text = """
 Contacto: info [at] example [dot] com

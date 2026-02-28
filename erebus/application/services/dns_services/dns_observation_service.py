@@ -12,6 +12,11 @@ class DNSObservationService:
         max_dns = int(context.cfg["limits"]["dns_max_domains"])
         domains_to_check = list(context.all_domains)[:max_dns]
 
+        base_domain = context.execution.TARGET
+        if base_domain not in domains_to_check:
+            domains_to_check.insert(0, base_domain)
+
+
         for domain in domains_to_check:
             self._analyze_domain(context, domain)
 
@@ -101,3 +106,10 @@ class DNSObservationService:
                 target_resolvable=None,
                 exposure_level=exposure_level
             )
+
+
+        cname_results = self.dns_cname_collector.collect(domain)
+        print("DEBUG CNAME:", cname_results)
+
+        ns_results = self.dns_ns_collector.collect(domain)
+        print("DEBUG NS:", ns_results)
