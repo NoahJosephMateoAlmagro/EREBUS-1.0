@@ -1,5 +1,8 @@
 from collectors.base import PassiveCollector
 import requests
+from requests.exceptions import RequestException
+
+from exceptions.exceptions import CollectorError
 
 
 class EmailCollector(PassiveCollector):
@@ -10,6 +13,8 @@ class EmailCollector(PassiveCollector):
     def collect(self, target: str):
 
         results = []
+        attempted = 0
+        network_failures = 0
 
         urls = [
             f"https://{target}",
@@ -19,6 +24,8 @@ class EmailCollector(PassiveCollector):
         ]
 
         for url in urls:
+            attempted += 1
+
             try:
                 response = requests.get(
                     url,
@@ -37,7 +44,14 @@ class EmailCollector(PassiveCollector):
                     "html": response.text
                 })
 
-            except requests.exceptions.RequestException:
+            except RequestException:
+                network_failures += 1
                 continue
+
+        # Si todas las URLs fallaron por red → error real
+        if network_failures == attempted:
+            raise CollectorError(
+                f"No se pudo acceder al dominio {target} en ninguna variante"
+            )
 
         return results

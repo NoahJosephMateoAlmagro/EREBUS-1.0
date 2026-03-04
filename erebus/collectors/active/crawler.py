@@ -3,6 +3,8 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
+from exceptions.exceptions import CollectorError
+
 
 class Crawler:
 
@@ -29,14 +31,8 @@ class Crawler:
 
         self.domain = urlparse(first).netloc if first else ""
 
-        print(f"[CRAWLER] Inicializado para dominio: {self.domain}")
-        print(f"[CRAWLER] Seeds iniciales: {len(self.queue)}")
-        print(f"[CRAWLER] Límite de páginas: {self.max_pages}")
-
-
     def _normalize(self, url: str) -> str:
         return url.split("#")[0].rstrip("/")
-
 
     def _is_internal(self, url: str) -> bool:
         parsed = urlparse(url)
@@ -56,39 +52,31 @@ class Crawler:
 
         return netloc == self.domain
 
-
     def collect(self):
+
         results = []
 
-        print("[CRAWLER] Iniciando crawling...")
+        try:
+            while self.queue and len(self.visited) < self.max_pages:
 
-        while self.queue and len(self.visited) < self.max_pages:
+                url = self._normalize(self.queue.pop(0))
 
-            print(f"\n[CRAWLER] Cola: {len(self.queue)} | Visitadas: {len(self.visited)}")
+                if url in self.visited:
+                    continue
 
-            url = self._normalize(self.queue.pop(0))
-
-            if url in self.visited:
-                print(f"[CRAWLER] ⚠ Ya visitada: {url}")
-                continue
-
-            print(f"[CRAWLER] ➡ Visitando: {url}")
-
-            try:
-                response = requests.get(
-                    url,
-                    timeout=self.timeout,
-                    headers={"User-Agent": "EREBUS/1.0"}
-                )
-
-                status = response.status_code
-                print(f"[CRAWLER] Status: {status}")
+                try:
+                    response = requests.get(
+                        url,
+                        timeout=self.timeout,
+                        headers={"User-Agent": "EREBUS/1.0"}
+                    )
+                except requests.RequestException:
+                    # fallo HTTP → no abortamos
+                    continue
 
                 content_type = response.headers.get("Content-Type", "")
-                print(f"[CRAWLER] Content-Type: {content_type}")
 
                 if "text/html" not in content_type:
-                    print(f"[CRAWLER] ❌ No es HTML, se omite.")
                     continue
 
                 self.visited.add(url)
@@ -110,15 +98,11 @@ class Crawler:
                         if full_url not in self.visited:
                             self.queue.append(full_url)
 
-                print(f"[CRAWLER] ✔ Links internos encontrados: {len(links)}")
-
                 scripts = set()
                 for s in soup.find_all("script", src=True):
                     full = self._normalize(urljoin(url, s["src"]))
                     if self._is_internal(full):
                         scripts.add(full)
-
-                print(f"[CRAWLER] ✔ Scripts internos encontrados: {len(scripts)}")
 
                 results.append({
                     "url": url,
@@ -127,12 +111,7 @@ class Crawler:
                     "scripts": list(scripts)
                 })
 
-            except Exception as e:
-                print(f"[CRAWLER ERROR] {url} -> {e}")
-                continue
-
-        print("\n[CRAWLER] Finalizado.")
-        print(f"[CRAWLER] Total páginas visitadas: {len(self.visited)}")
-        print(f"[CRAWLER] Total resultados devueltos: {len(results)}")
+        except Exception as e:
+            raise CollectorError(f"Crawler internal error: {e}")
 
         return results

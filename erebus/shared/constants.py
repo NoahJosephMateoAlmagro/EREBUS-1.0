@@ -42,5 +42,6 @@ SOURCE_JS = "js"
 SOURCE_SCRAPING_DOM = "scraping_dom"
 SOURCE_SCRAPING_JSON = "scraping_json"
 SOURCE_FILE = "file"
+SOURCE_JSON = "json"
 
 

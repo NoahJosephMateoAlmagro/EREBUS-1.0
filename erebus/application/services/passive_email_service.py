@@ -1,4 +1,6 @@
+from datetime import datetime
 import shared.constants as C
+from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 
 
 class EmailPassiveService:
@@ -8,29 +10,45 @@ class EmailPassiveService:
         self.email_analyzer = email_analyzer
         self.uow = uow
 
-    def run(self, context):
+    def run(self, context) -> ModuleResponse:
 
-        print("Buscando emails pasivos...")
-
-        pages = self.email_collector.collect(
-            context.execution.TARGET
+        response = ModuleResponse(
+            module_name="email_passive",
+            status=ModuleStatus.SUCCESS,
+            started_at=datetime.utcnow()
         )
 
-        for page in pages:
+        metrics = {
+            "pages_fetched": 0,
 
-            html = page.get("html", "")
-            source_url = page.get("url")
+            "emails_matched_raw": 0,
+            "emails_normalized_ok": 0,
+            "emails_skipped_duplicate": 0,
+            "emails_inserted": 0
+        }
 
-            emails = self.email_analyzer.extract(html)
+        try:
+            pages = self.email_collector.collect(context.execution.TARGET)
+            metrics["pages_fetched"] = len(pages)
 
-            for e in emails:
+            for page in pages:
+                html = page.get("html", "") or ""
+                source_url = page.get("url")
 
-                email = self.email_analyzer.normalize(e)
+                emails = self.email_analyzer.extract(html)
 
-                if not email:
-                    continue
+                for raw in emails:
+                    metrics["emails_matched_raw"] += 1
 
-                if context.is_new_email(email):
+                    email = self.email_analyzer.normalize(raw)
+                    if not email:
+                        continue
+
+                    metrics["emails_normalized_ok"] += 1
+
+                    if not context.is_new_email(email):
+                        metrics["emails_skipped_duplicate"] += 1
+                        continue
 
                     self.uow.emails.insert_email(
                         context.execution.ID,
@@ -40,3 +58,16 @@ class EmailPassiveService:
                         source=source_url,
                         context=source_url
                     )
+
+                    metrics["emails_inserted"] += 1
+
+            response.metrics = metrics
+
+        except Exception as e:
+            response.status = ModuleStatus.FAILED
+            response.errors.append(f"Email passive error: {e}")
+
+        finally:
+            response.finished_at = datetime.utcnow()
+
+        return response

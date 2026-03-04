@@ -1,10 +1,12 @@
-import dns.resolver
 from collectors.base import PassiveCollector
+import dns.resolver
 import shared.constants as C
+from exceptions.exceptions import CollectorError
+
 
 class DNS_NS_Collector(PassiveCollector):
 
-    def __init__(self, timeout=8):
+    def __init__(self, timeout: int = 8):
         self.resolver = dns.resolver.Resolver(configure=False)
         self.resolver.lifetime = timeout
         self.resolver.timeout = timeout
@@ -13,6 +15,7 @@ class DNS_NS_Collector(PassiveCollector):
     def collect(self, domain: str):
 
         results = []
+        domain = domain.rstrip(".").lower()
 
         try:
             answers = self.resolver.resolve(domain, "NS")
@@ -30,11 +33,14 @@ class DNS_NS_Collector(PassiveCollector):
         except (
             dns.resolver.NoAnswer,
             dns.resolver.NXDOMAIN,
-            dns.resolver.Timeout
+            dns.resolver.Timeout,
+            dns.resolver.NoNameservers
         ):
-            pass
+            # No es error técnico grave → simplemente no hay registros NS
+            return results
 
         except Exception as e:
-            print(f"[DNS][NS] Error {domain} -> {e}")
+            # Error inesperado → fallo real del collector
+            raise CollectorError(f"NS resolution error for {domain}: {e}")
 
         return results

@@ -1,3 +1,8 @@
+from datetime import datetime
+from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
+from exceptions.exceptions import CollectorError
+
+
 class CrawlingService:
 
     def __init__(
@@ -12,60 +17,77 @@ class CrawlingService:
         self.crawler_wayback_service = crawler_wayback_service
         self.crawler_processing_service = crawler_processing_service
 
-    def run(self, context):
+    def run(self, context) -> ModuleResponse | None:
 
-        print("[CRAWLING] Iniciando pipeline de crawling")
-
-        # -----------------------------------------
-        # 1️⃣ Descubrimiento de seeds
-        # -----------------------------------------
-
-        crawl_urls, sources = self.seed_discovery_service.get_seeds(context)
-
-        print(f"[CRAWLING] Seeds totales descubiertas: {len(crawl_urls)}")
-
-        # -----------------------------------------
-        # 2️⃣ Crawler LIVE
-        # -----------------------------------------
-
-        live_results = self.crawler_live_service.run(
-            context,
-            crawl_urls,
-            sources
+        response = ModuleResponse(
+            module_name="crawling",
+            status=ModuleStatus.SUCCESS,
+            started_at=datetime.utcnow()
         )
 
-        context.stats.live_pages_visited = len(live_results)
+        metrics = {
+            "seeds_discovered": 0,
+            "live_pages": 0,
+            "wayback_pages": 0,
+            "total_pages": 0
+        }
 
-        print(f"[CRAWLING] LIVE pages: {len(live_results)}")
+        try:
+            # 1️⃣ Seed discovery
+            crawl_urls, sources = self.seed_discovery_service.get_seeds(context)
+            metrics["seeds_discovered"] = len(crawl_urls)
 
-        # -----------------------------------------
-        # 3️⃣ Crawler WAYBACK
-        # -----------------------------------------
+            # 2️⃣ Live crawling
+            live_results = self.crawler_live_service.run(
+                context,
+                crawl_urls,
+                sources
+            )
+            metrics["live_pages"] = len(live_results)
 
-        wayback_results = []
+            # 3️⃣ Wayback crawling
+            wayback_response = self.crawler_wayback_service.run(
+                context.execution.TARGET
+            )
 
-        if context.cfg["modules"].get("wayback"):
+            if wayback_response.status == ModuleStatus.FAILED:
+                response.status = ModuleStatus.FAILED
+                response.errors.extend(wayback_response.errors)
+                response.finished_at = datetime.utcnow()
+                return response
 
-            wayback_results = self.crawler_wayback_service.run(context.execution.TARGET)
+            wayback_results = wayback_response.data or []
+            metrics["wayback_pages"] = len(wayback_results)
 
-            context.stats.wayback_pages_visited = len(wayback_results)
+            # 🔥 agregamos métricas del submódulo
+            if wayback_response.metrics:
+                metrics.update({
+                    f"wayback_{k}": v
+                    for k, v in wayback_response.metrics.items()
+                })
 
-            print(f"[CRAWLING] WAYBACK pages: {len(wayback_results)}")
+            # 4️⃣ Unificación
+            context.live_results = live_results
+            context.wayback_results = wayback_results
+            context.crawl_results = live_results + wayback_results
 
-        # -----------------------------------------
-        # 4️⃣ Unificación de resultados
-        # -----------------------------------------
+            metrics["total_pages"] = len(context.crawl_results)
 
-        context.live_results = live_results
-        context.wayback_results = wayback_results
-        context.crawl_results = live_results + wayback_results
+            # 5️⃣ Processing
+            processing_metrics = self.crawler_processing_service.run(context)
+            metrics.update(processing_metrics)
 
-        print(f"[CRAWLING] Total páginas acumuladas: {len(context.crawl_results)}")
+            response.metrics = metrics
 
-        # -----------------------------------------
-        # 5️⃣ Procesamiento
-        # -----------------------------------------
+        except CollectorError as e:
+            response.status = ModuleStatus.FAILED
+            response.errors.append(str(e))
 
-        self.crawler_processing_service.run(context)
+        except Exception:
+            response.status = ModuleStatus.FAILED
+            response.errors.append("Unexpected error in crawling module")
 
-        print("[CRAWLING] Procesamiento finalizado")
+        finally:
+            response.finished_at = datetime.utcnow()
+
+        return response

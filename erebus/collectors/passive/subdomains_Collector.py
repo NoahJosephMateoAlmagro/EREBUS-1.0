@@ -1,6 +1,8 @@
 import requests
+from requests.exceptions import RequestException
 from collectors.base import PassiveCollector
 import shared.constants as C
+from exceptions.exceptions import CollectorError
 
 
 class SubdomainCollector(PassiveCollector):
@@ -10,41 +12,46 @@ class SubdomainCollector(PassiveCollector):
         self.limit = limit
 
     def collect(self, target: str):
+
         results = []
 
+        url = f"https://crt.sh/?q=%25.{target}&output=json"
+        headers = {"User-Agent": "EREBUS/1.0"}
+
         try:
-            url = f"https://crt.sh/?q=%25.{target}&output=json"
-            headers = {"User-Agent": "EREBUS/1.0"}
             response = requests.get(url, headers=headers, timeout=self.timeout)
 
-            if response.status_code != 200:
-                return results
+        except RequestException as e:
+            raise CollectorError(f"Error HTTP consultando crt.sh: {e}")
 
+        if response.status_code != 200:
+            raise CollectorError(
+                f"crt.sh respondió con status {response.status_code}"
+            )
+
+        try:
             data = response.json()
-            subdomains = set()
-
-            for entry in data:
-                name_value = entry.get("name_value", "")
-                for domain in name_value.split("\n"):
-                    domain = domain.strip().lower()
-
-                    if domain.endswith(target) and not domain.startswith("*."):
-                        subdomains.add(domain)
-
-            for sub in sorted(subdomains):
-
-                if len(results) >= self.limit:
-                    break
-
-                results.append({
-                    "value": sub,
-                    "source": C.TECHNIQUE_SUBDOMAINS
-                })
-
-        except requests.RequestException as e:
-            print("Error HTTP obteniendo subdominios:", e)
 
         except ValueError as e:
-            print("Error parseando JSON de crt.sh:", e)
+            raise CollectorError(f"Error parseando JSON de crt.sh: {e}")
+
+        subdomains = set()
+
+        for entry in data:
+            name_value = entry.get("name_value", "")
+            for domain in name_value.split("\n"):
+                domain = domain.strip().lower()
+
+                if domain.endswith(target) and not domain.startswith("*."):
+                    subdomains.add(domain)
+
+        for sub in sorted(subdomains):
+            if len(results) >= self.limit:
+                break
+
+            results.append({
+                "value": sub,
+                "source": C.TECHNIQUE_SUBDOMAINS
+            })
 
         return results

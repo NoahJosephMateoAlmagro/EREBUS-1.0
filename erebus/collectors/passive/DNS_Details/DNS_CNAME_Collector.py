@@ -1,6 +1,7 @@
-import dns.resolver
 from collectors.base import PassiveCollector
+import dns.resolver
 import shared.constants as C
+from exceptions.exceptions import CollectorError
 
 
 class DNS_CNAME_Collector(PassiveCollector):
@@ -8,11 +9,9 @@ class DNS_CNAME_Collector(PassiveCollector):
     def __init__(self, timeout: int):
         self.timeout = timeout
 
-
     def collect(self, domain: str):
 
         results = []
-
         domain = domain.rstrip(".").lower()
 
         try:
@@ -38,9 +37,11 @@ class DNS_CNAME_Collector(PassiveCollector):
             dns.resolver.Timeout,
             dns.resolver.NoNameservers
         ):
-            pass
+            # No es error técnico grave → simplemente no hay CNAME
+            return results
 
         except Exception as e:
-            print(f"[DNS][CNAME] Error {domain} -> {e}")
+            # Error inesperado → fallo real del collector
+            raise CollectorError(f"CNAME resolution error for {domain}: {e}")
 
         return results

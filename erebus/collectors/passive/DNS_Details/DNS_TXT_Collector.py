@@ -1,6 +1,7 @@
-import dns.resolver
 from collectors.base import PassiveCollector
+import dns.resolver
 import shared.constants as C
+from exceptions.exceptions import CollectorError
 
 
 class DNS_TXT_Collector(PassiveCollector):
@@ -11,11 +12,10 @@ class DNS_TXT_Collector(PassiveCollector):
         self.resolver.timeout = timeout
         self.resolver.nameservers = ["8.8.8.8", "1.1.1.1"]
 
-
-
     def collect(self, domain: str):
 
         results = []
+        domain = domain.rstrip(".").lower()
 
         try:
             answers = self.resolver.resolve(domain, "TXT", tcp=True)
@@ -37,11 +37,13 @@ class DNS_TXT_Collector(PassiveCollector):
         except (
             dns.resolver.NoAnswer,
             dns.resolver.NXDOMAIN,
-            dns.resolver.Timeout
+            dns.resolver.Timeout,
+            dns.resolver.NoNameservers
         ):
-            pass
+            # No es error grave → simplemente no hay registros TXT
+            return results
 
         except Exception as e:
-            print(f"[DNS][TXT] Error {domain} -> {e}")
+            raise CollectorError(f"TXT resolution error for {domain}: {e}")
 
         return results

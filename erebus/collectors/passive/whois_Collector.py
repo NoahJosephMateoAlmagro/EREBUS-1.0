@@ -1,11 +1,13 @@
-import whois
 from collectors.base import PassiveCollector
+import whois
+
+from exceptions.exceptions import CollectorError
 
 
 class WhoisCollector(PassiveCollector):
 
-
     def collect(self, target: str):
+
         try:
             w = whois.whois(target)
 
@@ -24,13 +26,10 @@ class WhoisCollector(PassiveCollector):
                 "creation_date": first(w.creation_date),
                 "expiration_date": first(w.expiration_date),
                 "updated_date": first(w.updated_date),
-
-                # Campos potencialmente múltiples
                 "name_servers": as_list(w.name_servers),
                 "status": as_list(w.status),
                 "emails": as_list(w.emails),
             }
 
         except Exception as e:
-            print("Error WHOIS:", e)
-            return None
+            raise CollectorError(f"WHOIS error for {target}: {e}")

@@ -29,34 +29,57 @@ class Orchestrator:
 
         context = ExecutionContext(execution, cfg)
 
-        if cfg["modules"]["subdomains"]:
-            services["subdomain"].run(context)
+        module_results = []
 
-        if cfg["modules"]["whois"]:
-            services["whois"].run(context)
+        # -----------------------------
+        # Ejecutar módulos homogéneos
+        # -----------------------------
 
-        if cfg["modules"]["dns"]:
-            services["dns"].run(context)
+        def execute(module_key, service_key):
+            if cfg["modules"].get(module_key):
+                result = services[service_key].run(context)
+                module_results.append(result)
 
-        if cfg["modules"]["emails_passive"]:
-            services["emails_passive"].run(context)
+        print("\n========== SUBDOMAINS ==========")
+        execute("subdomains", "subdomain")
+        print("\n========== WHOIS ==========")
+        execute("whois", "whois")
+        print("\n========== DNS ==========")
+        execute("dns", "dns")
+        print("\n========== EMAILS PASSIVE ==========")
+        execute("emails_passive", "emails_passive")
+        print("\n========== CRAWLER ==========")
+        execute("crawler", "crawling")
+        print("\n========== JS PARSING ==========")
+        execute("js_parsing", "js")
+        print("\n========== FILE PARSING ==========")
+        execute("file_parsing", "file")
+        print("\n========== SCRAPING ==========")
+        execute("scraping", "scraping")
 
-        if cfg["modules"]["crawler"]:
-            services["crawling"].run(context)
-            services["crawler_processing"].run(context)
-
-        if cfg["modules"]["js_parsing"]:
-            services["js"].run(context)
-
-        if cfg["modules"].get("file_parsing"):
-            services["file"].run(context)
-
-        if cfg["modules"]["scraping"]:
-            services["scraping"].run(context)
+        # -----------------------------
+        # Persistir métricas globales
+        # -----------------------------
 
         self.uow.metrics.insert_metrics(execution.ID)
 
-        services["debug"].print_summary(
-            execution.ID,
-            context.stats
-        )
+        # -----------------------------
+        # Print uniforme
+        # -----------------------------
+        for r in module_results:
+            print("DEBUG TYPE:", type(r))
+
+
+        print("\n========== EXECUTION SUMMARY ==========")
+
+        for r in module_results:
+            print(f"[{r.module_name}]")
+            print("  Status:", r.status)
+            print("  Metrics:", r.metrics)
+            if r.errors:
+                print("  Errors:", r.errors)
+            print()
+
+        print("=======================================\n")
+
+        return module_results

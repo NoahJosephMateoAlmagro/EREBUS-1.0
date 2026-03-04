@@ -2,6 +2,9 @@ import requests
 from urllib.parse import urlparse
 from collections import defaultdict
 
+from collectors.base import PassiveCollector
+from exceptions.exceptions import CollectorError
+
 """
 [BORRAR DESPUES]
 
@@ -119,15 +122,18 @@ un diseño limpio y justificable para un proyecto académico.
 [BORRAR DESPUES]
 """
 
-class WaybackCollector:
+
+class WaybackCollector(PassiveCollector):
 
     CDX_URL = "https://web.archive.org/cdx/search/cdx"
 
-    def __init__(self, timeout=10, cdx_limit=2000):
+    def __init__(self, timeout: int = 10, cdx_limit: int = 2000):
         self.timeout = timeout
         self.cdx_limit = cdx_limit
 
     def collect(self, domain: str):
+
+        results = []
 
         params = {
             "url": f"{domain}/*",
@@ -137,32 +143,40 @@ class WaybackCollector:
         }
 
         try:
-            r = requests.get(
-                self.CDX_URL,
-                params=params,
-                timeout=self.timeout,
-                headers={"User-Agent": "EREBUS/1.0"}
-            )
+            try:
+                r = requests.get(
+                    self.CDX_URL,
+                    params=params,
+                    timeout=self.timeout,
+                    headers={"User-Agent": "EREBUS/1.0"}
+                )
+            except requests.RequestException:
+                # Wayback no responde → no rompemos el motor
+                return results
 
-            print("[WAYBACK][COLLECTOR] Request URL:", r.url)
-            print("[WAYBACK][COLLECTOR] Status:", r.status_code)
+            if r.status_code != 200 or not r.text:
+                return results
 
-            if r.status_code != 200:
-                return []
+            try:
+                data = r.json()
+            except ValueError as e:
+                raise CollectorError(f"Wayback JSON parse error for {domain}: {e}")
 
-            data = r.json()
+            # Primera fila son cabeceras
+            for row in data[1:]:
+                if len(row) < 3:
+                    continue
 
-            print("[WAYBACK][COLLECTOR] Rows received:", len(data))
-
-            return [
-                {
+                results.append({
                     "timestamp": row[0],
                     "original": row[1],
                     "status": row[2]
-                }
-                for row in data[1:]
-            ]
+                })
+
+        except CollectorError:
+            raise
 
         except Exception as e:
-            print("[WAYBACK][COLLECTOR] Error:", e)
-            return []
+            raise CollectorError(f"Wayback collector internal error for {domain}: {e}")
+
+        return results

@@ -1,11 +1,13 @@
+from collectors.base import PassiveCollector
 import requests
 import xml.etree.ElementTree as ET
-from collectors.base import PassiveCollector
+
+from exceptions.exceptions import CollectorError
 
 
 class SitemapCollector(PassiveCollector):
 
-    def __init__(self, timeout=8, max_urls=200):
+    def __init__(self, timeout: int = 8, max_urls: int = 200):
         self.timeout = timeout
         self.max_urls = max_urls
 
@@ -14,17 +16,23 @@ class SitemapCollector(PassiveCollector):
         urls = []
 
         try:
-            r = requests.get(
-                sitemap_url,
-                timeout=self.timeout,
-                headers={"User-Agent": "EREBUS/1.0"}
-            )
-
-            if r.status_code != 200:
-                print(f"[SITEMAP] Status {r.status_code} en {sitemap_url}")
+            try:
+                r = requests.get(
+                    sitemap_url,
+                    timeout=self.timeout,
+                    headers={"User-Agent": "EREBUS/1.0"}
+                )
+            except requests.RequestException:
+                # Fallo HTTP → no es error estructural
                 return urls
 
-            root = ET.fromstring(r.text)
+            if r.status_code != 200 or not r.text:
+                return urls
+
+            try:
+                root = ET.fromstring(r.text)
+            except ET.ParseError as e:
+                raise CollectorError(f"Sitemap XML parse error for {sitemap_url}: {e}")
 
             for loc in root.findall(".//{*}loc"):
 
@@ -35,9 +43,10 @@ class SitemapCollector(PassiveCollector):
                 if text:
                     urls.append(text)
 
-            print(f"[SITEMAP] {sitemap_url} -> {len(urls)} URLs extraídas")
+        except CollectorError:
+            raise
 
         except Exception as e:
-            print(f"[SITEMAP ERROR] {sitemap_url} -> {e}")
+            raise CollectorError(f"Sitemap collector error for {sitemap_url}: {e}")
 
         return urls

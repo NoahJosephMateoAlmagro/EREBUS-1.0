@@ -1,3 +1,6 @@
+from exceptions.exceptions import CollectorError
+
+
 class SeedDiscoveryService:
 
     def __init__(self, robots_collector, sitemap_collector):
@@ -5,34 +8,28 @@ class SeedDiscoveryService:
         self.sitemap_collector = sitemap_collector
 
     def get_seeds(self, context):
-        """
-        Devuelve:
-            - crawl_urls (set)
-            - sources (dict url -> origin)
-        """
 
         crawl_urls = set()
         sources = {}
 
-        # 1️⃣ Base seeds
         base_urls = self._build_base_urls(context.execution.TARGET)
 
         for url in base_urls:
             crawl_urls.add(url)
             sources[url] = "base"
 
-        # 2️⃣ Robots + Sitemap discovery
-        self._discover_from_robots_and_sitemap(
-            context,
-            crawl_urls,
-            sources
-        )
+        try:
+            self._discover_from_robots_and_sitemap(
+                context,
+                crawl_urls,
+                sources
+            )
+        except CollectorError:
+            # No abortamos el crawling por fallo en robots/sitemap
+            pass
 
         return crawl_urls, sources
 
-
-    # -----------------------------------------
-    # Helpers
     # -----------------------------------------
 
     def _build_base_urls(self, domain: str):
@@ -42,7 +39,6 @@ class SeedDiscoveryService:
             f"http://{domain}",
             f"http://www.{domain}",
         ]
-
 
     def _discover_from_robots_and_sitemap(self, context, urls, sources):
 
@@ -55,11 +51,8 @@ class SeedDiscoveryService:
         robots_added = 0
         sitemap_added = 0
 
+        # -------- ROBOTS --------
         robots = self.robots_collector.collect(target)
-
-        # -------------------------
-        # Robots paths
-        # -------------------------
 
         for path in robots.get("paths", []):
 
@@ -76,10 +69,7 @@ class SeedDiscoveryService:
                 sources[url] = "robots"
                 robots_added += 1
 
-        # -------------------------
-        # Sitemaps declarados en robots
-        # -------------------------
-
+        # -------- SITEMAPS DECLARADOS --------
         for sitemap_url in robots.get("sitemaps", []):
 
             if max_sitemap_urls and sitemap_added >= max_sitemap_urls:
@@ -97,10 +87,7 @@ class SeedDiscoveryService:
                     sources[u] = "sitemap"
                     sitemap_added += 1
 
-        # -------------------------
-        # Sitemaps por defecto
-        # -------------------------
-
+        # -------- SITEMAPS POR DEFECTO --------
         default_sitemaps = [
             f"https://{target}/sitemap.xml",
             f"https://{target}/sitemap_index.xml"

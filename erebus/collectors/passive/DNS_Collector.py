@@ -1,6 +1,7 @@
 import dns.resolver
 from collectors.base import PassiveCollector
 import shared.constants as C
+from exceptions.exceptions import CollectorError
 
 
 class DNSCollector(PassiveCollector):
@@ -12,9 +13,13 @@ class DNSCollector(PassiveCollector):
         self.resolver.nameservers = ["8.8.8.8", "1.1.1.1"]
 
     def collect(self, target: str):
+
         resultados = []
+        attempted = 0
+        network_failures = 0
 
         for record_type in ["A", "AAAA"]:
+            attempted += 1
             try:
                 respuestas = self.resolver.resolve(target, record_type)
 
@@ -27,12 +32,22 @@ class DNSCollector(PassiveCollector):
                     })
 
             except dns.resolver.NXDOMAIN:
-                pass
+                # Dominio no existe → no es error técnico
+                continue
+
             except dns.resolver.NoAnswer:
-                pass
+                # No hay registros de ese tipo → no es error
+                continue
+
             except dns.resolver.Timeout:
-                pass
+                network_failures += 1
+                continue
+
             except Exception as e:
-                print("DNS ERROR:", type(e), e)
+                raise CollectorError(f"Error inesperado resolviendo DNS: {e}")
+
+        # Si todo fueron timeouts, lo consideramos fallo técnico
+        if network_failures == attempted and attempted > 0:
+            raise CollectorError(f"Timeout resolviendo DNS para {target}")
 
         return resultados

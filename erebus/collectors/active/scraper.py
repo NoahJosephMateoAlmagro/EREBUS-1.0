@@ -2,10 +2,12 @@ import json
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, TimeoutError
 
+from exceptions.exceptions import CollectorError
+
 
 class Scraper:
 
-    def __init__(self, timeout=30000):
+    def __init__(self, timeout: int = 30000):
         self.timeout = timeout
 
     @staticmethod
@@ -17,8 +19,13 @@ class Scraper:
 
     def collect(self, url: str):
 
-        json_texts = []
-        json_objects = []
+        result = {
+            "url": url,
+            "final_url": None,
+            "html": None,
+            "json_texts": [],
+            "json_objects": []
+        }
 
         def handle_response(response):
             try:
@@ -31,13 +38,14 @@ class Scraper:
 
                     if resp_domain == page_domain or resp_domain.endswith("." + page_domain):
                         text = response.text()
-                        json_texts.append(text)
+                        result["json_texts"].append(text)
 
                         try:
-                            json_objects.append(json.loads(text))
+                            result["json_objects"].append(json.loads(text))
                         except Exception:
                             pass
             except Exception:
+                # Nunca rompemos el scraping por una respuesta malformada
                 pass
 
         try:
@@ -64,27 +72,20 @@ class Scraper:
                         wait_until="domcontentloaded"
                     )
                 except TimeoutError:
-                    page.unroute("**/*")
+                    # Timeout → devolvemos resultado vacío estructurado
                     page.close()
                     context.close()
                     browser.close()
-                    return None
+                    return result
 
-                final_url = page.url
-                html = page.content()
+                result["final_url"] = page.url
+                result["html"] = page.content()
 
-                page.unroute("**/*")
                 page.close()
                 context.close()
                 browser.close()
 
-            return {
-                "url": url,
-                "final_url": final_url,
-                "html": html,
-                "json_texts": json_texts,
-                "json_objects": json_objects
-            }
+        except Exception as e:
+            raise CollectorError(f"Scraper internal error for {url}: {e}")
 
-        except Exception:
-            return None
+        return result
