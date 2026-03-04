@@ -165,12 +165,13 @@ SCHEMA_SQL = """
         CREATE TABLE IF NOT EXISTS execution_metrics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
-            metric TEXT,       
-            value REAL,
-            FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
+            module_name TEXT NOT NULL,
+            metric_name TEXT NOT NULL,
+            metric_value INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(execution_id, module_name, metric_name)
         );
-        
-        
+                
         CREATE INDEX IF NOT EXISTS idx_email_execution
         ON email_results (execution_id);
         

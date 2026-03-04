@@ -38,7 +38,7 @@ APP_CONFIG = {
         "js_max_scripts": 15,
 
         #Files
-        "file_max_size": 5000000,
+        "file_max_size": 5000,
     },
 
     "timeouts": {

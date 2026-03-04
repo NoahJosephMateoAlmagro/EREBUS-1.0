@@ -1,5 +1,9 @@
+from datetime import datetime
+
 from application.bootstrap.service_builder import ServiceBuilder
 from application.objects.execution_context import ExecutionContext
+from application.objects.responses.ExecutionResponse import ExecutionResponse
+from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from shared.domain_validator import is_valid_domain
 
 
@@ -9,6 +13,7 @@ class Orchestrator:
         self.uow = uow
 
     def _validate_cfg(self, cfg):
+
         if cfg is None:
             raise ValueError("Configuración requerida: cfg no puede ser None")
 
@@ -24,6 +29,8 @@ class Orchestrator:
 
         self._validate_cfg(cfg)
 
+        started_at = datetime.utcnow()
+
         builder = ServiceBuilder(self.uow, cfg, is_valid_domain)
         services = builder.build()
 
@@ -31,55 +38,111 @@ class Orchestrator:
 
         module_results = []
 
-        # -----------------------------
-        # Ejecutar módulos homogéneos
-        # -----------------------------
+        # --------------------------------
+        # Ejecución segura de módulos
+        # --------------------------------
 
         def execute(module_key, service_key):
-            if cfg["modules"].get(module_key):
-                result = services[service_key].run(context)
+
+            if not cfg["modules"].get(module_key):
+                return
+
+            service = services.get(service_key)
+
+            if not service:
+                raise RuntimeError(f"Service not found: {service_key}")
+
+            try:
+                result = service.run(context)
+
+                if not result:
+                    raise ValueError("Module returned empty response")
+
                 module_results.append(result)
+
+            except Exception as e:
+
+                module_results.append(
+                    ModuleResponse(
+                        module_name=module_key,
+                        status=ModuleStatus.FAILED,
+                        started_at=datetime.utcnow(),
+                        finished_at=datetime.utcnow(),
+                        errors=[str(e)]
+                    )
+                )
+        # Pipeline de módulos
+        # --------------------------------
 
         print("\n========== SUBDOMAINS ==========")
         execute("subdomains", "subdomain")
+
         print("\n========== WHOIS ==========")
         execute("whois", "whois")
+
         print("\n========== DNS ==========")
         execute("dns", "dns")
+
         print("\n========== EMAILS PASSIVE ==========")
         execute("emails_passive", "emails_passive")
+
         print("\n========== CRAWLER ==========")
         execute("crawler", "crawling")
+
         print("\n========== JS PARSING ==========")
         execute("js_parsing", "js")
+
         print("\n========== FILE PARSING ==========")
         execute("file_parsing", "file")
+
         print("\n========== SCRAPING ==========")
         execute("scraping", "scraping")
 
-        # -----------------------------
+        # --------------------------------
         # Persistir métricas globales
-        # -----------------------------
+        # --------------------------------
 
-        self.uow.metrics.insert_metrics(execution.ID)
+        try:
+            for r in module_results:
 
-        # -----------------------------
-        # Print uniforme
-        # -----------------------------
-        for r in module_results:
-            print("DEBUG TYPE:", type(r))
+                if r.metrics:
+                    self.uow.metrics.insert_module_metrics(
+                        execution.ID,
+                        r.module_name,
+                        r.metrics
+                    )
 
+            self.uow.metrics.insert_derived_metrics(execution.ID)
+        except Exception as e:
+            print("Warning: metrics persistence failed:", e)
+
+        # --------------------------------
+        # Summary uniforme
+        # --------------------------------
 
         print("\n========== EXECUTION SUMMARY ==========")
 
         for r in module_results:
+
             print(f"[{r.module_name}]")
             print("  Status:", r.status)
+            print("  Duration:", r.duration_seconds)
             print("  Metrics:", r.metrics)
+
             if r.errors:
                 print("  Errors:", r.errors)
+
             print()
 
         print("=======================================\n")
 
-        return module_results
+        # --------------------------------
+        # Execution response
+        # --------------------------------
+
+        return ExecutionResponse(
+            execution_id=execution.ID,
+            target=execution.TARGET,
+            started_at=started_at,
+            modules=module_results
+        )

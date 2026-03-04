@@ -13,7 +13,7 @@ class FileParsingService:
         self.email_analyzer = email_analyzer
         self.uow = uow
 
-    def run(self, context) -> ModuleResponse:
+    def run(self, context) -> ModuleResponse | None:
 
         response = ModuleResponse(
             module_name="file_parsing",
@@ -22,8 +22,12 @@ class FileParsingService:
         )
 
         metrics = {
+
             # archivos
+            "file_links_seen": 0,
+            "files_attempted": 0,
             "files_processed": 0,
+            "files_failed": 0,
 
             # emails
             "emails_matched_raw": 0,
@@ -67,8 +71,13 @@ class FileParsingService:
 
         for url in page.get("links", []):
 
+            metrics["file_links_seen"] += 1
+
+            metrics["files_attempted"] += 1
             result = self.file_parser.parse(url)
+
             if not result:
+                metrics["files_failed"] += 1
                 continue
 
             metrics["files_processed"] += 1
@@ -84,6 +93,7 @@ class FileParsingService:
         emails = self.email_analyzer.extract_from_file_text(text)
 
         for raw in emails:
+
             metrics["emails_matched_raw"] += 1
 
             email = self.email_analyzer.normalize(raw)
@@ -112,6 +122,7 @@ class FileParsingService:
         creds = self.cred_parser.parse(text, source=C.SOURCE_FILE)
 
         for ctype, value, source in creds:
+
             metrics["credentials_matched_raw"] += 1
 
             if not context.is_new_credential(ctype, value):

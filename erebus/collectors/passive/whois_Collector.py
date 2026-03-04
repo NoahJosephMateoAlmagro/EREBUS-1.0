@@ -1,6 +1,5 @@
 from collectors.base import PassiveCollector
 import whois
-
 from exceptions.exceptions import CollectorError
 
 
@@ -9,7 +8,11 @@ class WhoisCollector(PassiveCollector):
     def collect(self, target: str):
 
         try:
+
             w = whois.whois(target)
+
+            if not w or not getattr(w, "domain_name", None):
+                raise CollectorError(f"WHOIS lookup failed for {target}")
 
             def first(value):
                 if isinstance(value, list):
