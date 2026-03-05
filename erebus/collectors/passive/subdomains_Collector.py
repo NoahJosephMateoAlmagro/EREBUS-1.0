@@ -1,11 +1,11 @@
 import requests
 from requests.exceptions import RequestException
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import shared.constants as C
 from exceptions.exceptions import CollectorError
 
 
-class SubdomainCollector(PassiveCollector):
+class SubdomainCollector(Collector):
 
     def __init__(self, timeout: int = 8, limit: int = 20):
         self.timeout = timeout

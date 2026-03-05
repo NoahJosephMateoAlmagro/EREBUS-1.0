@@ -1,11 +1,11 @@
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import requests
 from requests.exceptions import RequestException
 
 from exceptions.exceptions import CollectorError
 
 
-class EmailCollector(PassiveCollector):
+class EmailCollector(Collector):
 
     def __init__(self, timeout: int = 8):
         self.timeout = timeout

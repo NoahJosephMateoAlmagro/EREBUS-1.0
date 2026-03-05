@@ -1,4 +1,4 @@
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import requests
 import socket
 from urllib.parse import urlparse
@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from exceptions.exceptions import CollectorError
 
 
-class HttpHeadersCollector(PassiveCollector):
+class HttpHeadersCollector(Collector):
 
     def __init__(self, timeout: int = 6):
         self.timeout = timeout

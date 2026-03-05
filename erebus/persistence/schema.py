@@ -158,7 +158,27 @@ SCHEMA_SQL = """
             UNIQUE (execution_id, type, value),
             FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
         );
-
+        
+        /* ------------------------
+        # NMap
+        # ------------------------*/
+        CREATE TABLE IF NOT EXISTS nmap_results (
+        
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        
+            execution_id TEXT NOT NULL,
+        
+            ip TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            protocol TEXT,
+            state TEXT,
+        
+            service TEXT,
+            product TEXT,
+            version TEXT,
+        
+            source TEXT
+        );
         /* ------------------------
         # Métricas resumen
         # ------------------------*/

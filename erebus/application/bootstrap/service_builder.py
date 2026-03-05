@@ -14,6 +14,8 @@ from collectors.passive.waybackMachine_Collector import WaybackCollector
 from collectors.active.http_headers_Collector import HttpHeadersCollector
 from collectors.active.crawler import Crawler
 from collectors.active.scraper import Scraper
+from collectors.active.nmap_collector import NmapCollector
+from application.services.nmap_service import NmapService
 
 from processing.parsers.js_parser import JSParser
 from processing.parsers.credential_parser import CredentialParser
@@ -22,7 +24,7 @@ from processing.parsers.file_parser.txt_parser import TxtParser
 from processing.parsers.file_parser.pdf_parser import PdfParser
 from processing.parsers.file_parser.xml_parser import XmlParser
 from processing.normalizers.email_normalizer import EmailAnalyzer
-
+from processing.parsers.nmap_parser import NmapParser
 
 from application.services.subdomain_service import SubdomainService
 from application.services.whois_service import WhoisService
@@ -126,6 +128,11 @@ class ServiceBuilder:
             timeout=cfg["timeouts"]["scraping_page_load"]
         )
 
+        nmap_collector = NmapCollector(
+            timeout=cfg["timeouts"].get("nmap_scan", 60),
+            nmap_path=cfg.get("tools", {}).get("nmap_path")
+        )
+        nmap_parser = NmapParser()
         # ---------- Services ----------
 
         subdomain_service = SubdomainService(
@@ -177,8 +184,6 @@ class ServiceBuilder:
             crawler_processing_service=crawler_processing_service,
         )
 
-
-
         js_parsing_service = JSParsingService(
             js_parser,
             cred_parser,
@@ -200,6 +205,12 @@ class ServiceBuilder:
             uow
         )
 
+        nmap_service = NmapService(
+            nmap_collector,
+            nmap_parser,
+            uow
+        )
+
         print_debug_service = PrintDebugService(uow)
 
         return {
@@ -207,6 +218,7 @@ class ServiceBuilder:
             "whois": whois_service,
             "emails_passive": email_passive_service,
             "dns": dns_service,
+            "nmap": nmap_service,
             "crawling": crawling_service,
             "crawler_processing": crawler_processing_service,
             "js": js_parsing_service,

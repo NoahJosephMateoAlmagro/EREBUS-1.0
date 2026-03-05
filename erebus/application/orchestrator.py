@@ -83,6 +83,9 @@ class Orchestrator:
         print("\n========== DNS ==========")
         execute("dns", "dns")
 
+        print("\n========== NMAP ==========")
+        execute("nmap", "nmap")
+
         print("\n========== EMAILS PASSIVE ==========")
         execute("emails_passive", "emails_passive")
 

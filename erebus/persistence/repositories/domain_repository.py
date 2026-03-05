@@ -93,6 +93,17 @@ class DomainRepository(BaseRepository):
             VALUES (?, ?, ?, ?)
         """, (execution_id, domain, ip, source))
 
+    def get_resolved_ips(self, execution_id: str) -> list[str]:
+        rows = self._fetchall("""
+            SELECT DISTINCT ip
+            FROM resolved_domain_results
+            WHERE execution_id = ?
+            AND ip IS NOT NULL
+            AND ip != ''
+        """, (execution_id,))
+
+        return [r[0] for r in rows]
+
     def insert_dns_observation(
         self,
         execution_id,

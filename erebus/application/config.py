@@ -1,5 +1,7 @@
 APP_CONFIG = {
-
+    "tools": {
+        "nmap_path": r"C:\\Program Files (x86)\\Nmap\\nmap.exe"
+    },
     "debug": {
         "clear_db_on_run": True,
         "show_debug_popups": True,
@@ -9,12 +11,13 @@ APP_CONFIG = {
         "subdomains": True,
         "whois": True,
         "dns": True,
+        "nmap": True,
         "http_headers": True,
         "emails_passive": True,
         "crawler": True,
-        "js_parsing": False,
+        "js_parsing": True,
         "file_parsing": True,
-        "scraping": False,
+        "scraping": True,
         "wayback": True
     },
 
@@ -44,11 +47,14 @@ APP_CONFIG = {
     "timeouts": {
         # HTTP (requests)
         "http_passive_email": 20,
-        "http_subdomains": 25,
+        "http_subdomains": 75,
         "http_headers": 5,
 
         # DNS
         "dns_resolution": 15,
+
+        #NMAP
+        "nmap_scan": 120,
 
         # Crawler (requests)
 

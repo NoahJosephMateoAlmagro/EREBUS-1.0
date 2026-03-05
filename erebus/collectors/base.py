@@ -1,4 +1,4 @@
-class PassiveCollector:
+class Collector:
     """
     Base class for passive collectors.
     All collectors must implement collect(target)

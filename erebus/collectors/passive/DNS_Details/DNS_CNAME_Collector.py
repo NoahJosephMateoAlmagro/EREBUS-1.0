@@ -1,10 +1,10 @@
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import dns.resolver
 import shared.constants as C
 from exceptions.exceptions import CollectorError
 
 
-class DNS_CNAME_Collector(PassiveCollector):
+class DNS_CNAME_Collector(Collector):
 
     def __init__(self, timeout: int):
         self.timeout = timeout

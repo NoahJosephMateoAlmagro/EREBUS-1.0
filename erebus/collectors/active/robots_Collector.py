@@ -1,10 +1,10 @@
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import requests
 
 from exceptions.exceptions import CollectorError
 
 
-class RobotsCollector(PassiveCollector):
+class RobotsCollector(Collector):
 
     def __init__(self, timeout: int = 8):
         self.timeout = timeout

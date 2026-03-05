@@ -1,10 +1,10 @@
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import dns.resolver
 import shared.constants as C
 from exceptions.exceptions import CollectorError
 
 
-class DNS_TXT_Collector(PassiveCollector):
+class DNS_TXT_Collector(Collector):
 
     def __init__(self, timeout: int = 8):
         self.resolver = dns.resolver.Resolver(configure=False)

@@ -1,9 +1,9 @@
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import whois
 from exceptions.exceptions import CollectorError
 
 
-class WhoisCollector(PassiveCollector):
+class WhoisCollector(Collector):
 
     def collect(self, target: str):
 

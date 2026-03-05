@@ -1,11 +1,11 @@
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 import requests
 import xml.etree.ElementTree as ET
 
 from exceptions.exceptions import CollectorError
 
 
-class SitemapCollector(PassiveCollector):
+class SitemapCollector(Collector):
 
     def __init__(self, timeout: int = 8, max_urls: int = 200):
         self.timeout = timeout

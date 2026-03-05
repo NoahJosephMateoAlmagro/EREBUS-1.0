@@ -2,7 +2,7 @@ import requests
 from urllib.parse import urlparse
 from collections import defaultdict
 
-from collectors.base import PassiveCollector
+from collectors.base import Collector
 from exceptions.exceptions import CollectorError
 
 """
@@ -123,7 +123,7 @@ un diseño limpio y justificable para un proyecto académico.
 """
 
 
-class WaybackCollector(PassiveCollector):
+class WaybackCollector(Collector):
 
     CDX_URL = "https://web.archive.org/cdx/search/cdx"
 
