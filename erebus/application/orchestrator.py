@@ -1,4 +1,6 @@
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 from application.bootstrap.service_builder import ServiceBuilder
 from application.objects.execution_context import ExecutionContext
@@ -37,6 +39,7 @@ class Orchestrator:
         context = ExecutionContext(execution, cfg)
 
         module_results = []
+        lock = threading.Lock()
 
         # --------------------------------
         # Ejecución segura de módulos
@@ -45,6 +48,7 @@ class Orchestrator:
         def execute(module_key, service_key):
 
             if not cfg["modules"].get(module_key):
+                print(f"[DEBUG] {module_key} disabled in config")
                 return
 
             service = services.get(service_key)
@@ -52,25 +56,36 @@ class Orchestrator:
             if not service:
                 raise RuntimeError(f"Service not found: {service_key}")
 
+            print(f"[DEBUG] START module: {module_key}")
+
             try:
+
                 result = service.run(context)
 
                 if not result:
                     raise ValueError("Module returned empty response")
 
-                module_results.append(result)
+                with lock:
+                    module_results.append(result)
+
+                print(f"[DEBUG] END module: {module_key}")
 
             except Exception as e:
 
-                module_results.append(
-                    ModuleResponse(
-                        module_name=module_key,
-                        status=ModuleStatus.FAILED,
-                        started_at=datetime.utcnow(),
-                        finished_at=datetime.utcnow(),
-                        errors=[str(e)]
+                print(f"[DEBUG] ERROR module: {module_key} -> {e}")
+
+                with lock:
+                    module_results.append(
+                        ModuleResponse(
+                            module_name=module_key,
+                            status=ModuleStatus.FAILED,
+                            started_at=datetime.utcnow(),
+                            finished_at=datetime.utcnow(),
+                            errors=[str(e)]
+                        )
                     )
-                )
+
+        # --------------------------------
         # Pipeline de módulos
         # --------------------------------
 
@@ -83,23 +98,57 @@ class Orchestrator:
         print("\n========== DNS ==========")
         execute("dns", "dns")
 
-        print("\n========== SHODAN ==========")
-        execute("shodan", "shodan")
+        # --------------------------------
+        # Fase paralela infraestructura
+        # --------------------------------
 
-        print("\n========== NMAP ==========")
-        execute("nmap", "nmap")
+        print("\n========== PARALLEL INFRASTRUCTURE ==========")
 
-        print("\n========== EMAILS PASSIVE ==========")
-        execute("emails_passive", "emails_passive")
+        parallel_modules = [
+            ("nmap", "nmap"),
+            ("shodan", "shodan"),
+            ("emails_passive", "emails_passive"),
+            ("crawler", "crawling"),
+        ]
 
-        print("\n========== CRAWLER ==========")
-        execute("crawler", "crawling")
+        with ThreadPoolExecutor(max_workers=4) as executor:
 
-        print("\n========== JS PARSING ==========")
-        execute("js_parsing", "js")
+            futures = [
+                executor.submit(execute, module_key, service_key)
+                for module_key, service_key in parallel_modules
+            ]
 
-        print("\n========== FILE PARSING ==========")
-        execute("file_parsing", "file")
+            for f in futures:
+                f.result()
+
+        print("[DEBUG] Infrastructure phase finished")
+
+        # --------------------------------
+        # Fase paralela parsing contenido
+        # --------------------------------
+
+        print("\n========== CONTENT PARSING ==========")
+
+        parsers = [
+            ("js_parsing", "js"),
+            ("file_parsing", "file"),
+        ]
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+
+            futures = [
+                executor.submit(execute, module_key, service_key)
+                for module_key, service_key in parsers
+            ]
+
+            for f in futures:
+                f.result()
+
+        print("[DEBUG] Content parsing phase finished")
+
+        # --------------------------------
+        # Scraping final
+        # --------------------------------
 
         print("\n========== SCRAPING ==========")
         execute("scraping", "scraping")
@@ -109,6 +158,7 @@ class Orchestrator:
         # --------------------------------
 
         try:
+
             for r in module_results:
 
                 if r.metrics:
@@ -119,8 +169,11 @@ class Orchestrator:
                     )
 
             self.uow.metrics.insert_derived_metrics(execution.ID)
+
         except Exception as e:
-            print("Warning: metrics persistence failed:", e)
+            print("[DEBUG] Warning: metrics persistence failed:", e)
+
+
 
         # --------------------------------
         # Summary uniforme
@@ -142,6 +195,22 @@ class Orchestrator:
 
         print("=======================================\n")
 
+        print("\n========== PERFORMANCE ==========")
+
+        real_duration = (datetime.utcnow() - started_at).total_seconds()
+
+        modules_duration = sum(
+            r.duration_seconds for r in module_results if r.duration_seconds
+        )
+
+        print(f"Real execution time: {real_duration:.2f} seconds")
+        print(f"Sum of module durations: {modules_duration:.2f} seconds")
+
+        if modules_duration > 0:
+            efficiency = modules_duration / real_duration
+            print(f"Concurrency factor: {efficiency:.2f}x")
+
+        print("=================================\n")
         # --------------------------------
         # Execution response
         # --------------------------------

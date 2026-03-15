@@ -9,17 +9,17 @@ APP_CONFIG = {
 
     "modules": {
         "subdomains": True,
-        "whois": False,
+        "whois": True,
         "dns": True,
         "nmap": True,
-        "http_headers": False,
-        "emails_passive": False,
-        "crawler": False,
-        "js_parsing": False,
-        "file_parsing": False,
-        "scraping": False,
-        "wayback": False,
-        "shodan": False
+        "http_headers": True,
+        "emails_passive": True,
+        "crawler": True,
+        "js_parsing": True,
+        "file_parsing": True,
+        "scraping": True,
+        "wayback": True,
+        "shodan": True
     },
 
     "limits": {
