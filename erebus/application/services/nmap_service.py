@@ -1,16 +1,16 @@
 from datetime import datetime
+
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from exceptions.exceptions import CollectorError
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 
 class NmapService:
 
-    def __init__(self, nmap_collector, nmap_parser, uow):
+    def __init__(self, nmap_collector, nmap_parser, uow, batch_size: int = 5):
         self.nmap_collector = nmap_collector
         self.nmap_parser = nmap_parser
         self.uow = uow
+        self.batch_size = batch_size
 
     def run(self, context):
 
@@ -45,64 +45,49 @@ class NmapService:
 
             targets.extend(ips)
 
-            seen = set()
-            dedup_targets = []
-
-            for t in targets:
-                if t and t not in seen:
-                    seen.add(t)
-                    dedup_targets.append(t)
-
+            # deduplicado
+            dedup_targets = list(dict.fromkeys(t for t in targets if t))
             metrics["targets_total"] = len(dedup_targets)
 
             print(f"[DEBUG] Total targets to scan: {metrics['targets_total']}")
 
-            max_workers = 5
+            if not dedup_targets:
+                print("[DEBUG] No targets to scan")
+                return response
 
-            print(f"[DEBUG] Starting ThreadPoolExecutor with {max_workers} workers")
+            # -------- escaneo por lotes (para mejorar un poco la ejecucion utilizando la concurrencia de nmap pero sin sobrecargarlo --------
 
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for i in range(0, len(dedup_targets), self.batch_size):
 
-                future_to_target = {
-                    executor.submit(self.nmap_collector.collect, t): t
-                    for t in dedup_targets
-                }
+                batch = dedup_targets[i:i + self.batch_size]
 
-                for future in as_completed(future_to_target):
+                print(f"[DEBUG] Scanning batch {i // self.batch_size + 1}: {batch}")
 
-                    target = future_to_target[future]
-                    thread_name = threading.current_thread().name
+                try:
 
-                    print(f"[DEBUG] Thread {thread_name} handling result for {target}")
+                    xml_output = self.nmap_collector.collect(batch)
 
-                    metrics["targets_scanned"] += 1
+                    port_results = self.nmap_parser.parse(xml_output)
 
-                    try:
+                    print(f"[DEBUG] Parsed {len(port_results)} ports in batch")
 
-                        print(f"[DEBUG] {thread_name} waiting result for {target}")
+                    for port in port_results:
+                        self.uow.nmap.insert_port(
+                            context.execution.ID,
+                            port
+                        )
+                        metrics["ports_found"] += 1
 
-                        xml_output = future.result()
+                    metrics["targets_scanned"] += len(batch)
 
-                        print(f"[DEBUG] {thread_name} scan completed for {target}")
+                except CollectorError as e:
 
-                        port_results = self.nmap_parser.parse(xml_output)
+                    print(f"[DEBUG] Batch failed: {batch} -> {e}")
 
-                        print(f"[DEBUG] {thread_name} parsed {len(port_results)} ports for {target}")
+                    response.errors.append(str(e))
 
-                        for port in port_results:
-
-                            self.uow.nmap.insert_port(
-                                context.execution.ID,
-                                port
-                            )
-
-                            metrics["ports_found"] += 1
-
-                    except CollectorError as e:
-
-                        print(f"[DEBUG] ERROR in thread {thread_name} for {target}: {e}")
-
-                        response.errors.append(str(e))
+                    # no paramos el sistema, seguimos con el siguiente batch
+                    continue
 
         except CollectorError as e:
 
@@ -121,9 +106,8 @@ class NmapService:
         finally:
 
             response.metrics = metrics
+            response.finished_at = datetime.utcnow()
 
             print("[DEBUG] NmapService finished")
-
-            response.finished_at = datetime.utcnow()
 
         return response

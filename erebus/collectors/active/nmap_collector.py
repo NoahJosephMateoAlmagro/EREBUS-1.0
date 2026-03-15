@@ -3,29 +3,26 @@ import shutil
 from pathlib import Path
 from collectors.base import Collector
 from exceptions.exceptions import CollectorError
-import threading
+
 
 class NmapCollector(Collector):
 
-    def __init__(self, timeout: int = 60, nmap_path: str | None = None):
+    def __init__(self, timeout: int = 600, nmap_path: str | None = None):
         self.timeout = timeout
         self.nmap_path = nmap_path
 
     def _resolve_nmap(self):
 
-        # primero se mira en config
         if self.nmap_path and Path(self.nmap_path).exists():
             return self.nmap_path
 
-        # 2se comprueba si existe nmap PATH
         path = shutil.which("nmap")
         if path:
             return path
 
-        # rutas típicas Windows si no existe
         candidates = [
-            r"C:\\Program Files\\Nmap\\nmap.exe",
-            r"C:\\Program Files (x86)\\Nmap\\nmap.exe"
+            r"C:\Program Files\Nmap\nmap.exe",
+            r"C:\Program Files (x86)\Nmap\nmap.exe"
         ]
 
         for p in candidates:
@@ -34,9 +31,7 @@ class NmapCollector(Collector):
 
         return None
 
-    def collect(self, target: str):
-        thread = threading.current_thread().name
-        print(f"[DEBUG] {thread} starting Nmap scan for {target}")
+    def collect(self, targets):
 
         nmap = self._resolve_nmap()
 
@@ -45,6 +40,13 @@ class NmapCollector(Collector):
                 "Nmap no está instalado o no se encontró en config/PATH."
             )
 
+        # aceptar str o lista
+        if isinstance(targets, str):
+            targets = [targets]
+
+        if not targets:
+            raise CollectorError("No targets provided to Nmap")
+
         try:
 
             cmd = [
@@ -52,9 +54,8 @@ class NmapCollector(Collector):
                 "-sV",
                 "-Pn",
                 "--top-ports", "1000",
-                "-oX", "-",
-                target
-            ]
+                "-oX", "-"
+            ] + targets
 
             result = subprocess.run(
                 cmd,
@@ -64,12 +65,12 @@ class NmapCollector(Collector):
             )
 
             if result.returncode != 0:
-                raise CollectorError(f"Nmap execution failed for {target}")
+                raise CollectorError(f"Nmap execution failed: {result.stderr}")
 
             return result.stdout
 
         except subprocess.TimeoutExpired:
-            raise CollectorError(f"Nmap timeout for {target}")
+            raise CollectorError("Nmap timeout")
 
         except Exception as e:
-            raise CollectorError(f"Nmap error for {target}: {e}")
+            raise CollectorError(f"Nmap error: {e}")
