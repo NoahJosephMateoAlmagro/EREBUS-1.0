@@ -16,6 +16,8 @@ from collectors.active.crawler import Crawler
 from collectors.active.scraper import Scraper
 from collectors.active.nmap_collector import NmapCollector
 from application.services.nmap_service import NmapService
+from application.services.APIs.shodan_service import ShodanService
+from collectors.passive.APIs.shodan_collector import ShodanCollector
 
 from processing.parsers.js_parser import JSParser
 from processing.parsers.credential_parser import CredentialParser
@@ -133,6 +135,9 @@ class ServiceBuilder:
             nmap_path=cfg.get("tools", {}).get("nmap_path")
         )
         nmap_parser = NmapParser()
+
+        shodan_collector = ShodanCollector(timeout=cfg["timeouts"].get("http_subdomains"))
+
         # ---------- Services ----------
 
         subdomain_service = SubdomainService(
@@ -211,6 +216,12 @@ class ServiceBuilder:
             uow
         )
 
+        shodan_service = ShodanService(
+            shodan_collector,
+            uow,
+            self.domain_validator
+        )
+
         print_debug_service = PrintDebugService(uow)
 
         return {
@@ -224,5 +235,6 @@ class ServiceBuilder:
             "js": js_parsing_service,
             "file": file_parsing_service,
             "scraping": scraping_service,
-            "debug": print_debug_service
+            "debug": print_debug_service,
+            "shodan": shodan_service
         }

@@ -8,6 +8,7 @@ from persistence.repositories.whois_repository import WhoisRepository
 from persistence.repositories.metrics_repository import MetricsRepository
 from persistence.repositories.execution_repository import ExecutionRepository
 from persistence.repositories.nmap_repository import NmapRepository
+from persistence.repositories.api_repository import ApiRepository
 
 class UnitOfWork:
     def __init__(self, conn: sqlite3.Connection):
@@ -22,3 +23,4 @@ class UnitOfWork:
         self.metrics = MetricsRepository(conn)
         self.executions = ExecutionRepository(conn)
         self.nmap = NmapRepository(conn)
+        self.apis = ApiRepository(conn)

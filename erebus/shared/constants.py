@@ -27,6 +27,7 @@ TECHNIQUE_FILE_TXT = "file_txt"
 TECHNIQUE_FILE_PDF = "file_pdf"
 TECHNIQUE_FILE_XML = "file_xml"
 TECHNIQUE_NMAP = "NMAP_scan"
+TECHNIQUE_SHODAN = "Shodan"
 # ---------------------------------------------
 # Execution status
 # ---------------------------------------------

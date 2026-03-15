@@ -83,6 +83,9 @@ class Orchestrator:
         print("\n========== DNS ==========")
         execute("dns", "dns")
 
+        print("\n========== SHODAN ==========")
+        execute("shodan", "shodan")
+
         print("\n========== NMAP ==========")
         execute("nmap", "nmap")
 

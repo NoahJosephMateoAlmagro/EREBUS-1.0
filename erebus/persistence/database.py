@@ -45,6 +45,7 @@ class Database:
         cursor.execute("DELETE FROM credential_results")
         cursor.execute("DELETE FROM execution_metrics")
         cursor.execute("DELETE FROM http_headers")
+        cursor.execute("DELETE FROM nmap_results")
         self.conn.commit()
 
 

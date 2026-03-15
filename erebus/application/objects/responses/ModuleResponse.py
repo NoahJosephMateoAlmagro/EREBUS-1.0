@@ -5,6 +5,7 @@ from datetime import datetime
 
 
 class ModuleStatus(str, Enum):
+    SKIPPED = "SKIPPED"
     SUCCESS = "SUCCESS"
     PARTIAL = "PARTIAL"
     FAILED = "FAILED"

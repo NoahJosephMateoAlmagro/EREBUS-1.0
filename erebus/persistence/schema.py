@@ -200,4 +200,25 @@ SCHEMA_SQL = """
         
         CREATE INDEX IF NOT EXISTS idx_dns_execution
         ON dns_observations (execution_id);
+    
+        /* ------------------------
+        # API CREDENTIALS
+        # ------------------------*/
+        
+        CREATE TABLE IF NOT EXISTS api_credentials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        
+            provider TEXT NOT NULL,       -- google | shodan
+            api_key TEXT NOT NULL,
+        
+            extra TEXT,                   -- JSON para cosas como cx de Google
+            description TEXT,
+            enabled INTEGER DEFAULT 1,
+        
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        
+            UNIQUE(provider, api_key)
+        );
+
+
 """
