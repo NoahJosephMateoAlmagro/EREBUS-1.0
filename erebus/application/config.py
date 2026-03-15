@@ -11,7 +11,7 @@ APP_CONFIG = {
         "subdomains": True,
         "whois": False,
         "dns": True,
-        "nmap": False,
+        "nmap": True,
         "http_headers": False,
         "emails_passive": False,
         "crawler": False,
@@ -19,7 +19,7 @@ APP_CONFIG = {
         "file_parsing": False,
         "scraping": False,
         "wayback": False,
-        "shodan": True
+        "shodan": False
     },
 
     "limits": {

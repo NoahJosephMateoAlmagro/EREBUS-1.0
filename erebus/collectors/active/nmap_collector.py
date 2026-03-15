@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 from collectors.base import Collector
 from exceptions.exceptions import CollectorError
+import threading
 
 class NmapCollector(Collector):
 
@@ -34,6 +35,8 @@ class NmapCollector(Collector):
         return None
 
     def collect(self, target: str):
+        thread = threading.current_thread().name
+        print(f"[DEBUG] {thread} starting Nmap scan for {target}")
 
         nmap = self._resolve_nmap()
 
