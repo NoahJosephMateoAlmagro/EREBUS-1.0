@@ -8,18 +8,18 @@ APP_CONFIG = {
     },
 
     "modules": {
-        "subdomains": True,
-        "whois": True,
-        "dns": True,
-        "nmap": True,
-        "http_headers": True,
-        "emails_passive": True,
+        "subdomains": False,
+        "whois": False,
+        "dns": False,
+        "nmap": False,
+        "http_headers": False,
+        "emails_passive": False,
         "crawler": True,
-        "js_parsing": True,
+        "js_parsing": False,
         "file_parsing": True,
-        "scraping": True,
+        "scraping": False,
         "wayback": True,
-        "shodan": True
+        "shodan": False
     },
 
     "limits": {
@@ -42,7 +42,7 @@ APP_CONFIG = {
         "js_max_scripts": 15,
 
         #Files
-        "file_max_size": 5000,
+        "file_max_size": 300000000,
     },
 
     "timeouts": {

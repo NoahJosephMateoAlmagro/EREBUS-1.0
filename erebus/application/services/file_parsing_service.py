@@ -1,5 +1,6 @@
 from datetime import datetime
 from urllib.parse import urlparse
+from pathlib import Path
 
 import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
@@ -14,6 +15,9 @@ class FileParsingService:
         self.uow = uow
 
     def run(self, context) -> ModuleResponse | None:
+
+        # reset duplicados por ejecución
+        self.seen_files = set()
 
         response = ModuleResponse(
             module_name="file_parsing",
@@ -47,16 +51,19 @@ class FileParsingService:
             return response
 
         try:
+
             for page in context.crawl_results:
                 self._process_page(context, page, metrics)
 
             response.metrics = metrics
 
         except Exception as e:
+
             response.status = ModuleStatus.FAILED
             response.errors.append(f"File parsing error: {e}")
 
         finally:
+
             response.finished_at = datetime.utcnow()
 
         return response
@@ -73,20 +80,47 @@ class FileParsingService:
 
             metrics["file_links_seen"] += 1
 
+            parsed = urlparse(url)
+            ext = Path(parsed.path).suffix.lower()
+
+            # filtro por tipo de archivo
+            if ext not in C.FILE_EXTENSIONS_TO_PARSE:
+                continue
+
+            # evitar duplicados
+            if url in self.seen_files:
+                continue
+
+            self.seen_files.add(url)
+
+            print(f"[FILE] Attempting parse: {url}")
+
             metrics["files_attempted"] += 1
-            result = self.file_parser.parse(url)
+
+            try:
+                result = self.file_parser.parse(url)
+            except Exception as e:
+                metrics["files_failed"] += 1
+                print(f"[FILE] Parser exception: {url} -> {e}")
+                continue
 
             if not result:
                 metrics["files_failed"] += 1
+                print(f"[FILE] Failed parse: {url}")
                 continue
 
             metrics["files_processed"] += 1
+            print(f"[FILE] Parsed OK: {url}")
 
-            text = result["text"]
-            technique = result["technique"]
+            text = result.get("text", "")
+            technique = result.get("technique", "file_parser")
 
             self._process_emails(context, text, url, technique, origin, metrics)
             self._process_credentials(context, text, url, technique, origin, metrics)
+
+    # ----------------------------------------
+    # Email extraction
+    # ----------------------------------------
 
     def _process_emails(self, context, text, url, technique, origin, metrics):
 
@@ -97,6 +131,7 @@ class FileParsingService:
             metrics["emails_matched_raw"] += 1
 
             email = self.email_analyzer.normalize(raw)
+
             if not email:
                 continue
 
@@ -116,6 +151,10 @@ class FileParsingService:
             )
 
             metrics["emails_inserted"] += 1
+
+    # ----------------------------------------
+    # Credential extraction
+    # ----------------------------------------
 
     def _process_credentials(self, context, text, url, technique, origin, metrics):
 

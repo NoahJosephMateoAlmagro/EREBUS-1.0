@@ -47,3 +47,12 @@ SOURCE_FILE = "file"
 SOURCE_JSON = "json"
 
 
+FILE_EXTENSIONS_TO_PARSE= {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".txt",
+    ".csv"
+}
