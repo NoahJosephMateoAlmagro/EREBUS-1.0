@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from collectors.base import Collector
 from exceptions.exceptions import CollectorError
-
+from shared.logger import Logger
 """
 [BORRAR DESPUES]
 
@@ -124,17 +124,41 @@ un diseño limpio y justificable para un proyecto académico.
 
 
 class WaybackCollector(Collector):
+    """
+      Collector that retrieves historical snapshots from Wayback Machine (CDX API).
+
+      It collects raw snapshot metadata (timestamp, original URL, status)
+      that can later be filtered and processed by other components.
+      """
 
     CDX_URL = "https://web.archive.org/cdx/search/cdx"
 
     def __init__(self, timeout: int = 10, cdx_limit: int = 2000):
+
+        """
+        Args:
+           timeout (int): Request timeout to avoid blocking execution
+           cdx_limit (int): Max number of results requested from CDX API
+        """
         self.timeout = timeout
         self.cdx_limit = cdx_limit
 
+
     def collect(self, domain: str):
 
+        """
+        Queries Wayback CDX API and returns raw snapshot data.
+
+        Args:
+            domain (str): Target domain
+
+        Returns:
+            list[dict]: List of snapshots with timestamp, original URL and status
+        """
+        Logger.info(f"Starting Wayback collection for {domain}", context=self.__class__.__name__)
         results = []
 
+        # CDX query parameters
         params = {
             "url": f"{domain}/*",
             "output": "json",
@@ -142,8 +166,12 @@ class WaybackCollector(Collector):
             "limit": self.cdx_limit
         }
 
+        Logger.debug(f"CDX params: {params}", context=self.__class__.__name__)
+
         try:
             try:
+
+                # Request to Wayback CDX API
                 r = requests.get(
                     self.CDX_URL,
                     params=params,
@@ -151,18 +179,23 @@ class WaybackCollector(Collector):
                     headers={"User-Agent": "EREBUS/1.0"}
                 )
             except requests.RequestException:
-                # Wayback no responde → no rompemos el motor
+                # Wayback not reachable. Fail silently (non-critical error)
+                Logger.error("Wayback request failed", context=self.__class__.__name__)
                 return results
 
+            # Validate response
             if r.status_code != 200 or not r.text:
+                Logger.error("Wayback request failed", context=self.__class__.__name__)
                 return results
 
+            # Parse JSON response
             try:
                 data = r.json()
             except ValueError as e:
+                Logger.error("JSON parsing failed", context=self.__class__.__name__)
                 raise CollectorError(f"Wayback JSON parse error for {domain}: {e}")
 
-            # Primera fila son cabeceras
+            # First row contains headers. Skip it
             for row in data[1:]:
                 if len(row) < 3:
                     continue
@@ -173,10 +206,13 @@ class WaybackCollector(Collector):
                     "status": row[2]
                 })
 
+                Logger.info(f"Collected {len(results)} snapshots", context=self.__class__.__name__)
+
         except CollectorError:
             raise
 
         except Exception as e:
+            Logger.error(f"Unexpected error: {e}", context=self.__class__.__name__)
             raise CollectorError(f"Wayback collector internal error for {domain}: {e}")
 
         return results
