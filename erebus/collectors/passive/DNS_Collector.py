@@ -47,8 +47,6 @@ class DNSCollector(Collector):
         for record_type in ["A", "AAAA"]:
             attempted += 1
 
-            Logger.debug(f"Resolving {record_type} records", context=self.__class__.__name__)
-
             try:
                 answers = self.resolver.resolve(target, record_type)
 
@@ -82,6 +80,7 @@ class DNSCollector(Collector):
 
         # If all attempts failed due to timeouts, we treat it as technical failure
         if network_failures == attempted and attempted > 0:
+            Logger.error(f"DNS resolution timeout for {target}", context=self.__class__.__name__)
             raise CollectorError(f"DNS resolution timeout for{target}")
 
         Logger.info(f"Resolved {len(results)} DNS records", context=self.__class__.__name__)
