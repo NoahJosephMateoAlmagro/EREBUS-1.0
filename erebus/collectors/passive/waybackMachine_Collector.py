@@ -185,7 +185,7 @@ class WaybackCollector(Collector):
 
             # Validate response
             if r.status_code != 200 or not r.text:
-                Logger.error("Wayback request failed", context=self.__class__.__name__)
+                Logger.error("Wayback invalid response", context=self.__class__.__name__)
                 return results
 
             # Parse JSON response
@@ -206,7 +206,7 @@ class WaybackCollector(Collector):
                     "status": row[2]
                 })
 
-                Logger.info(f"Collected {len(results)} snapshots", context=self.__class__.__name__)
+            Logger.info(f"Collected {len(results)} snapshots", context=self.__class__.__name__)
 
         except CollectorError:
             raise

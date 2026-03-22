@@ -49,14 +49,12 @@ class SubdomainCollector(Collector):
 
         except RequestException as e:
             Logger.error(f"HTTP request failed: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"Error HTTP consultando crt.sh: {e}")
+            raise CollectorError(f"HTTP error querying crt.sh: {e}")
 
         # Validate response status
         if response.status_code != 200:
             Logger.error(f"Invalid response status: {response.status_code}", context=self.__class__.__name__)
-            raise CollectorError(
-                f"crt.sh respondió con status {response.status_code}"
-            )
+            raise CollectorError( f"crt.sh returned status {response.status_code}")
 
         # Parse JSON response
         try:
@@ -64,7 +62,7 @@ class SubdomainCollector(Collector):
 
         except ValueError as e:
             Logger.error("JSON parsing failed", context=self.__class__.__name__)
-            raise CollectorError(f"Error parseando JSON de crt.sh: {e}")
+            raise CollectorError(f"Error parsing crt.sh JSON: {e}")
 
         subdomains = set()
 
