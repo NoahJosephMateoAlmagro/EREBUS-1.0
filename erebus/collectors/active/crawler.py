@@ -4,10 +4,13 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
 from exceptions.exceptions import CollectorError
+from shared.logger import Logger
 
 
 class Crawler:
-
+    """
+    Crawler that navigates internal links starting from one or multiple URLs.
+    """
     def __init__(
         self,
         start_url: Union[str, List[str]],
@@ -15,6 +18,13 @@ class Crawler:
         timeout: int = 8,
         allowed_domain: str | None = None
     ):
+        """
+        Args:
+            start_url (str | list): Initial URL(s)
+            max_pages (int): Maximum number of pages to crawl
+            timeout (int): HTTP request timeout
+            allowed_domain (str | None): Optional domain restriction
+        """
         self.max_pages = max_pages
         self.timeout = timeout
         self.allowed_domain = allowed_domain
@@ -32,9 +42,15 @@ class Crawler:
         self.domain = urlparse(first).netloc if first else ""
 
     def _normalize(self, url: str) -> str:
+        """
+        Normalizes URLs by removing fragments and trailing slashes.
+        """
         return url.split("#")[0].rstrip("/")
 
     def _is_internal(self, url: str) -> bool:
+        """
+        Checks whether a URL belongs to the allowed domain scope.
+        """
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
 
@@ -53,6 +69,14 @@ class Crawler:
         return netloc == self.domain
 
     def collect(self):
+        """
+        Executes crawling process.
+
+        Returns:
+            list[dict]: Crawled pages with HTML, links and scripts
+        """
+
+        Logger.info("Starting crawler", context=self.__class__.__name__)
 
         results = []
 
@@ -64,6 +88,8 @@ class Crawler:
                 if url in self.visited:
                     continue
 
+                Logger.debug(f"Crawling {url}", context=self.__class__.__name__)
+
                 try:
                     response = requests.get(
                         url,
@@ -71,7 +97,8 @@ class Crawler:
                         headers={"User-Agent": "EREBUS/1.0"}
                     )
                 except requests.RequestException:
-                    # fallo HTTP → no abortamos
+                    # HTTP failure (skip URL)
+                    Logger.debug(f"Request failed for {url}", context=self.__class__.__name__)
                     continue
 
                 content_type = response.headers.get("Content-Type", "")
@@ -87,6 +114,7 @@ class Crawler:
                 for a in soup.find_all("a", href=True):
                     href = a["href"]
 
+                    # Skip mailto links
                     if "@" in href:
                         continue
 
@@ -112,6 +140,9 @@ class Crawler:
                 })
 
         except Exception as e:
+            Logger.error(f"Crawler internal error: {e}", context=self.__class__.__name__)
             raise CollectorError(f"Crawler internal error: {e}")
+
+        Logger.info(f"Crawled {len(results)} pages", context=self.__class__.__name__)
 
         return results
