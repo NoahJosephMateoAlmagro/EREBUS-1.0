@@ -8,7 +8,7 @@ class Logger:
     Supports basic log levels (DEBUG, INFO, ERROR).
     """
 
-    DEBUG_ENABLED = True  # Toggle all debug logs globally
+    DEBUG_ENABLED = False  # Toggle all debug logs globally
 
     @staticmethod
     def _log(level: str, message: str, context: Optional[str] = None) -> None:

@@ -1,18 +1,46 @@
 from datetime import datetime
 import shared.constants as C
-from application.objects.responses.ModuleResponse import ModuleResponse
-from application.objects.responses.ModuleResponse import ModuleStatus
+from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from exceptions.exceptions import CollectorError
+from shared.logger import Logger
 
 
 class SubdomainService:
+    """
+    Service responsible for collecting subdomains, validating discovered domains
+    and persisting new domain entries.
+    """
 
     def __init__(self, subdomain_collector, uow, domain_validator):
+        """
+        Args:
+            subdomain_collector: Collector responsible for retrieving subdomains
+            uow: Unit of Work for persistence operations
+            domain_validator: Callable used to validate and normalize domain values
+        """
         self.subdomain_collector = subdomain_collector
         self.uow = uow
         self._is_valid_domain = domain_validator
 
     def run(self, context) -> ModuleResponse | None:
+        """
+        Executes subdomain collection workflow.
+
+        Args:
+            context: Execution context containing target, execution metadata
+                and shared domain state
+
+        Returns:
+            ModuleResponse: Execution result with status, metrics and errors
+        """
+
+        target = context.execution.TARGET
+        execution_id = context.execution.ID
+
+        Logger.info(
+            f"Starting subdomain module execution_id={execution_id} target={target}",
+            context=self.__class__.__name__
+        )
 
         response = ModuleResponse(
             module_name="subdomains",
@@ -27,7 +55,7 @@ class SubdomainService:
 
         try:
             subdomains = self.subdomain_collector.collect(
-                context.execution.TARGET
+                target
             )
 
             metrics["subdomains_found"] = len(subdomains)
@@ -44,7 +72,7 @@ class SubdomainService:
                     context.seen_domains.add(domain)
 
                     self.uow.domains.insert_domain(
-                        context.execution.ID,
+                        execution_id,
                         domain,
                         source=C.TECHNIQUE_SUBDOMAINS,
                         status=C.DOMAIN_STATUS_NOT_EVALUATED
@@ -58,11 +86,30 @@ class SubdomainService:
             response.status = ModuleStatus.FAILED
             response.errors.append(str(e))
 
+            Logger.error(
+                f"Subdomain collector error execution_id={execution_id} target={target}: {e}",
+                context=self.__class__.__name__
+            )
+
         except Exception as e:
             response.status = ModuleStatus.FAILED
-            response.errors.append("Unexpected error in subdomain module")
+            response.errors.append(f"Unexpected error in subdomain module: {e}")
+
+
+            Logger.error(
+                f"Unexpected subdomain error execution_id={execution_id} target={target}: {e}",
+                context=self.__class__.__name__
+            )
+
 
         finally:
             response.finished_at = datetime.utcnow()
+
+            Logger.info(
+                f"Finished subdomain module execution_id={execution_id} "
+                f"status={response.status} metrics={metrics}",
+                context=self.__class__.__name__
+            )
+
 
         return response

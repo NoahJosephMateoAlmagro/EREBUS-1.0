@@ -56,3 +56,9 @@ FILE_EXTENSIONS_TO_PARSE= {
     ".txt",
     ".csv"
 }
+
+BAD_EXTENSIONS = (
+    ".css", ".js", ".png", ".jpg", ".jpeg", ".gif",
+    ".svg", ".ico", ".woff", ".woff2", ".ttf",
+    ".zip", ".rar", ".7z"
+)

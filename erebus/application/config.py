@@ -4,7 +4,7 @@ APP_CONFIG = {
     },
     "debug": {
         "clear_db_on_run": True,
-        "show_debug_popups": True,
+        "show_debug_popups": False,
     },
 
     "modules": {

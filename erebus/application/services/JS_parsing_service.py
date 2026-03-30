@@ -3,21 +3,47 @@ from urllib.parse import urlparse
 
 import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
+from exceptions.exceptions import CollectorError
+from shared.logger import Logger
 
 
 class JSParsingService:
+    """
+    Service responsible for parsing JavaScript resources extracted from live results
+    and storing discovered emails and credentials.
+    """
 
     def __init__(self, js_parser, cred_parser, email_analyzer, uow):
+        """
+        Args:
+            js_parser: Parser responsible for retrieving and analyzing JavaScript resources
+            cred_parser: Parser responsible for extracting credentials
+            email_analyzer: Analyzer responsible for normalizing email values
+            uow: Unit of Work for persistence operations
+        """
         self.js_parser = js_parser
         self.cred_parser = cred_parser
         self.email_analyzer = email_analyzer
         self.uow = uow
 
-    # ----------------------------------------
-    # Public API
-    # ----------------------------------------
+    def run(self, context) -> ModuleResponse | None:
+        """
+        Executes JavaScript parsing workflow over collected live results.
 
-    def run(self, context) -> ModuleResponse:
+        Args:
+            context: Execution context containing target, execution metadata,
+                configuration and live page results
+
+        Returns:
+            ModuleResponse: Execution result with status, metrics and errors
+        """
+        target = context.execution.TARGET
+        execution_id = context.execution.ID
+
+        Logger.info(
+            f"Starting JS parsing module execution_id={execution_id} target={target}",
+            context=self.__class__.__name__
+        )
 
         response = ModuleResponse(
             module_name="js_parsing",
@@ -28,12 +54,10 @@ class JSParsingService:
         metrics = {
             "scripts_limit": int(context.cfg["limits"]["js_max_scripts"]),
             "scripts_processed": 0,
-
             "emails_matched_raw": 0,
             "emails_normalized_ok": 0,
             "emails_skipped_duplicate": 0,
             "emails_inserted": 0,
-
             "credentials_matched_raw": 0,
             "credentials_skipped_duplicate": 0,
             "credentials_inserted": 0
@@ -42,36 +66,81 @@ class JSParsingService:
         if not context.live_results:
             response.metrics = metrics
             response.finished_at = datetime.utcnow()
+
+            Logger.info(
+                f"Finished JS parsing module execution_id={execution_id} "
+                f"status={response.status} metrics={metrics}",
+                context=self.__class__.__name__
+            )
+
             return response
 
         try:
             for page in context.live_results:
-
                 if metrics["scripts_processed"] >= metrics["scripts_limit"]:
                     break
 
-                if "@" in page["url"]:
-                    continue
+                try:
+                    page_url = page.get("url")
+                    if not page_url or "@" in page_url:
+                        continue
 
-                self._process_page(context, page, metrics)
+                    self._process_page(context, page, metrics)
+
+                except CollectorError as e:
+                    Logger.error(
+                        f"JS parsing collector error execution_id={execution_id} "
+                        f"target={target} url={page.get('url', 'unknown')}: {e}",
+                        context=self.__class__.__name__
+                    )
+
+                except Exception as e:
+                    Logger.error(
+                        f"Unexpected JS parsing page error execution_id={execution_id} "
+                        f"target={target} url={page.get('url', 'unknown')}: {e}",
+                        context=self.__class__.__name__
+                    )
 
             response.metrics = metrics
 
+        except CollectorError as e:
+            response.status = ModuleStatus.FAILED
+            response.errors.append(str(e))
+
+            Logger.error(
+                f"JS parsing collector error execution_id={execution_id} target={target}: {e}",
+                context=self.__class__.__name__
+            )
+
         except Exception as e:
             response.status = ModuleStatus.FAILED
-            response.errors.append(f"JS parsing error: {e}")
+            response.errors.append(f"Unexpected error in JS parsing module: {e}")
+
+            Logger.error(
+                f"Unexpected JS parsing error execution_id={execution_id} target={target}: {e}",
+                context=self.__class__.__name__
+            )
 
         finally:
             response.finished_at = datetime.utcnow()
 
+            Logger.info(
+                f"Finished JS parsing module execution_id={execution_id} "
+                f"status={response.status} metrics={metrics}",
+                context=self.__class__.__name__
+            )
+
         return response
 
-    # ----------------------------------------
-    # Internal
-    # ----------------------------------------
+    def _process_page(self, context, page, metrics) -> None:
+        """
+        Processes JavaScript references from a single page result.
 
-    def _process_page(self, context, page, metrics):
-
+        Args:
+            context: Execution context containing execution metadata and deduplication state
+            page: Page result containing the source URL and script references
+            metrics: Mutable metrics dictionary updated in place
+        """
         origin = page.get("origin")
 
         technique = (
@@ -80,18 +149,19 @@ class JSParsingService:
             else C.TECHNIQUE_JS_STATIC
         )
 
-        base_domain = self._extract_base_domain(page["url"])
-        if not base_domain:
+        page_url = page.get("url")
+        page_host = self._extract_page_host(page_url)
+
+        if not page_host:
             return
 
         scripts = page.get("scripts", []) or []
 
         for script_url in scripts:
-
             if metrics["scripts_processed"] >= metrics["scripts_limit"]:
                 break
 
-            parsed = self.js_parser.parse(script_url, base_domain)
+            parsed = self.js_parser.parse(script_url, page_host)
             if not parsed:
                 continue
 
@@ -107,8 +177,17 @@ class JSParsingService:
             self._process_emails(context, parsed, script_url, technique, metrics)
             self._process_credentials(context, parsed, script_url, technique, metrics)
 
-    def _process_emails(self, context, parsed, script_url, technique, metrics):
+    def _process_emails(self, context, parsed, script_url, technique, metrics) -> None:
+        """
+        Extracts, normalizes and persists emails from parsed JavaScript content.
 
+        Args:
+            context: Execution context containing execution metadata and deduplication state
+            parsed: Parsed JavaScript result
+            script_url: Script source URL
+            technique: Persistence technique label
+            metrics: Mutable metrics dictionary updated in place
+        """
         for raw in parsed.get("emails", []):
             metrics["emails_matched_raw"] += 1
 
@@ -128,17 +207,26 @@ class JSParsingService:
                 urlparse(script_url).netloc,
                 technique=technique,
                 source=script_url,
-                context=" "
+                context=""
             )
 
             metrics["emails_inserted"] += 1
 
-    def _process_credentials(self, context, parsed, script_url, technique, metrics):
+    def _process_credentials(self, context, parsed, script_url, technique, metrics) -> None:
+        """
+        Extracts and persists credentials from parsed JavaScript content.
 
+        Args:
+            context: Execution context containing execution metadata and deduplication state
+            parsed: Parsed JavaScript result
+            script_url: Script source URL
+            technique: Persistence technique label
+            metrics: Mutable metrics dictionary updated in place
+        """
         raw_js = parsed.get("raw", "") or ""
         creds = self.cred_parser.parse(raw_js, source=C.SOURCE_JS)
 
-        for ctype, value, source in creds:
+        for ctype, value, _ in creds:
             metrics["credentials_matched_raw"] += 1
 
             if not context.is_new_credential(ctype, value):
@@ -151,13 +239,22 @@ class JSParsingService:
                 value,
                 technique=technique,
                 source=script_url,
-                context=" "
+                context=""
             )
 
             metrics["credentials_inserted"] += 1
 
-    def _extract_base_domain(self, page_url: str):
+    def _extract_page_host(self, page_url: str) -> str | None:
+        """
+        Extracts the host associated with a page URL, including original host
+        recovery for Wayback URLs.
 
+        Args:
+            page_url (str): Page URL to inspect
+
+        Returns:
+            str | None: Extracted host or None if it cannot be determined
+        """
         if "web.archive.org" in page_url:
             try:
                 original = page_url.split("/web/", 1)[1]
