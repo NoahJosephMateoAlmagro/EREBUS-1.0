@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
@@ -7,31 +7,52 @@ from application.objects.execution_context import ExecutionContext
 from application.objects.responses.ExecutionResponse import ExecutionResponse
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from shared.domain_validator import is_valid_domain
+from shared.logger import Logger
 
 
 class Orchestrator:
+    """
+    Main orchestration component of the EREBUS engine.
+    """
 
     def __init__(self, uow):
         self.uow = uow
 
     def _validate_cfg(self, cfg):
-
         if cfg is None:
-            raise ValueError("Configuración requerida: cfg no puede ser None")
+            Logger.error(
+                "Invalid configuration: cfg is None",
+                context=self.__class__.__name__
+            )
+            raise ValueError("Configuration required: cfg cannot be None")
 
         if not isinstance(cfg, dict):
-            raise TypeError("Configuración inválida: cfg debe ser un dict")
+            Logger.error(
+                f"Invalid configuration type: expected dict, got {type(cfg)}",
+                context=self.__class__.__name__
+            )
+            raise TypeError("Invalid configuration: cfg must be a dict")
 
-        if "modules" not in cfg or "limits" not in cfg or "timeouts" not in cfg:
+        required_keys = {"modules", "limits", "timeouts"}
+
+        missing = required_keys - cfg.keys()
+
+        if missing:
+            Logger.error(
+                f"Invalid configuration: missing keys {missing}",
+                context=self.__class__.__name__
+            )
             raise ValueError(
-                "Configuración inválida: se esperaban las claves 'modules', 'limits' y 'timeouts'"
+                "Invalid configuration: expected keys 'modules', 'limits' and 'timeouts'"
             )
 
     def run(self, execution, cfg):
 
         self._validate_cfg(cfg)
 
-        started_at = datetime.utcnow()
+        started_at = datetime.now(timezone.utc)
+
+        Logger.info("Starting execution", context="Orchestrator")
 
         builder = ServiceBuilder(self.uow, cfg, is_valid_domain)
         services = builder.build()
@@ -42,13 +63,13 @@ class Orchestrator:
         lock = threading.Lock()
 
         # --------------------------------
-        # Ejecución segura de módulos
+        # Safe module execution
         # --------------------------------
 
         def execute(module_key, service_key):
 
-            if not cfg["modules"].get(module_key):
-                print(f"[DEBUG] {module_key} disabled in config")
+            if not cfg.get("modules", {}).get(module_key):
+                Logger.debug(f"{module_key} disabled in config", context="Orchestrator")
                 return
 
             service = services.get(service_key)
@@ -56,10 +77,9 @@ class Orchestrator:
             if not service:
                 raise RuntimeError(f"Service not found: {service_key}")
 
-            print(f"[DEBUG] START module: {module_key}")
+            Logger.info(f"START module: {module_key}", context="Orchestrator")
 
             try:
-
                 result = service.run(context)
 
                 if not result:
@@ -68,41 +88,44 @@ class Orchestrator:
                 with lock:
                     module_results.append(result)
 
-                print(f"[DEBUG] END module: {module_key}")
+                Logger.info(f"END module: {module_key}", context="Orchestrator")
 
             except Exception as e:
 
-                print(f"[DEBUG] ERROR module: {module_key} -> {e}")
+                Logger.error(
+                    f"ERROR module: {module_key} -> {e}",
+                    context="Orchestrator"
+                )
 
                 with lock:
                     module_results.append(
                         ModuleResponse(
                             module_name=module_key,
                             status=ModuleStatus.FAILED,
-                            started_at=datetime.utcnow(),
-                            finished_at=datetime.utcnow(),
+                            started_at=datetime.now(timezone.utc),
+                            finished_at=datetime.now(timezone.utc),
                             errors=[str(e)]
                         )
                     )
 
         # --------------------------------
-        # Pipeline de módulos
+        # Module pipeline
         # --------------------------------
 
-        print("\n========== SUBDOMAINS ==========")
+        Logger.info("PHASE: SUBDOMAINS", context="Orchestrator")
         execute("subdomains", "subdomain")
 
-        print("\n========== WHOIS ==========")
+        Logger.info("PHASE: WHOIS", context="Orchestrator")
         execute("whois", "whois")
 
-        print("\n========== DNS ==========")
+        Logger.info("PHASE: DNS", context="Orchestrator")
         execute("dns", "dns")
 
         # --------------------------------
-        # Fase paralela infraestructura
+        # Parallel infrastructure phase
         # --------------------------------
 
-        print("\n========== PARALLEL INFRASTRUCTURE ==========")
+        Logger.info("PHASE: PARALLEL INFRASTRUCTURE", context="Orchestrator")
 
         parallel_modules = [
             ("nmap", "nmap"),
@@ -121,13 +144,13 @@ class Orchestrator:
             for f in futures:
                 f.result()
 
-        print("[DEBUG] Infrastructure phase finished")
+        Logger.info("Infrastructure phase finished", context="Orchestrator")
 
         # --------------------------------
-        # Fase paralela parsing contenido
+        # Content parsing phase
         # --------------------------------
 
-        print("\n========== CONTENT PARSING ==========")
+        Logger.info("PHASE: CONTENT PARSING", context="Orchestrator")
 
         parsers = [
             ("js_parsing", "js"),
@@ -144,23 +167,21 @@ class Orchestrator:
             for f in futures:
                 f.result()
 
-        print("[DEBUG] Content parsing phase finished")
+        Logger.info("Content parsing phase finished", context="Orchestrator")
 
         # --------------------------------
-        # Scraping final
+        # Final scraping
         # --------------------------------
 
-        print("\n========== SCRAPING ==========")
+        Logger.info("PHASE: SCRAPING", context="Orchestrator")
         execute("scraping", "scraping")
 
         # --------------------------------
-        # Persistir métricas globales
+        # Persist metrics
         # --------------------------------
 
         try:
-
             for r in module_results:
-
                 if r.metrics:
                     self.uow.metrics.insert_module_metrics(
                         execution.ID,
@@ -171,46 +192,45 @@ class Orchestrator:
             self.uow.metrics.insert_derived_metrics(execution.ID)
 
         except Exception as e:
-            print("[DEBUG] Warning: metrics persistence failed:", e)
-
-
+            Logger.error(
+                f"Metrics persistence failed: {e}",
+                context="Orchestrator"
+            )
 
         # --------------------------------
-        # Summary uniforme
+        # Summary
         # --------------------------------
 
-        print("\n========== EXECUTION SUMMARY ==========")
+        Logger.info("EXECUTION SUMMARY", context="Orchestrator")
 
         for r in module_results:
 
-            print(f"[{r.module_name}]")
-            print("  Status:", r.status)
-            print("  Duration:", r.duration_seconds)
-            print("  Metrics:", r.metrics)
+            Logger.info(f"[{r.module_name}]", context="Orchestrator")
+            Logger.info(f"Status: {r.status}", context="Orchestrator")
+            Logger.info(f"Duration: {r.duration_seconds}", context="Orchestrator")
+            Logger.info(f"Metrics: {r.metrics}", context="Orchestrator")
 
             if r.errors:
-                print("  Errors:", r.errors)
+                Logger.error(f"Errors: {r.errors}", context="Orchestrator")
 
-            print()
+        # --------------------------------
+        # Performance
+        # --------------------------------
 
-        print("=======================================\n")
-
-        print("\n========== PERFORMANCE ==========")
-
-        real_duration = (datetime.utcnow() - started_at).total_seconds()
+        real_duration = (datetime.now(timezone.utc) - started_at).total_seconds()
 
         modules_duration = sum(
             r.duration_seconds for r in module_results if r.duration_seconds
         )
 
-        print(f"Real execution time: {real_duration:.2f} seconds")
-        print(f"Sum of module durations: {modules_duration:.2f} seconds")
+        Logger.info("PERFORMANCE", context="Orchestrator")
+        Logger.info(f"Real execution time: {real_duration:.2f} seconds", context="Orchestrator")
+        Logger.info(f"Sum of module durations: {modules_duration:.2f} seconds", context="Orchestrator")
 
         if modules_duration > 0:
             efficiency = modules_duration / real_duration
-            print(f"Concurrency factor: {efficiency:.2f}x")
+            Logger.info(f"Concurrency factor: {efficiency:.2f}x", context="Orchestrator")
 
-        print("=================================\n")
         # --------------------------------
         # Execution response
         # --------------------------------

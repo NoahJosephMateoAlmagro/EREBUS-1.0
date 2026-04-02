@@ -1,3 +1,8 @@
+"""
+Centralized constants used across EREBUS modules.
+Includes domain status, techniques, sources and file handling rules.
+"""
+
 # ---------------------------------------------
 # Domain resolution status
 # ---------------------------------------------
@@ -18,27 +23,32 @@ TECHNIQUE_SCRAPING_DOM = "scraping_dom"
 TECHNIQUE_SCRAPING_JSON = "scraping_json"
 TECHNIQUE_WHOIS = "whois"
 TECHNIQUE_SUBDOMAINS = "subdomains_crtsh"
+
 TECHNIQUE_DNS = "dns_resolver"
 TECHNIQUE_DNS_MX = "dns_mx"
 TECHNIQUE_DNS_TXT = "dns_txt"
-TECHNIQUE_DNS_NS ="dns_ns"
+TECHNIQUE_DNS_NS = "dns_ns"
 TECHNIQUE_DNS_CNAME = "dns_cname"
+
 TECHNIQUE_FILE_TXT = "file_txt"
 TECHNIQUE_FILE_PDF = "file_pdf"
 TECHNIQUE_FILE_XML = "file_xml"
-TECHNIQUE_NMAP = "NMAP_scan"
-TECHNIQUE_SHODAN = "Shodan"
+
+TECHNIQUE_NMAP = "nmap_scan"
+TECHNIQUE_SHODAN = "shodan"
+
 # ---------------------------------------------
 # Execution status
 # ---------------------------------------------
 
-EXECUTION_STATUS_RUNNING = "RUNNING"
-EXECUTION_STATUS_FINISHED = "FINISHED"
-EXECUTION_STATUS_ERROR = "ERROR"
+EXECUTION_STATUS_RUNNING = "running"
+EXECUTION_STATUS_FINISHED = "finished"
+EXECUTION_STATUS_ERROR = "error"
 
 # ---------------------------------------------
-# SOURCES
+# Sources
 # ---------------------------------------------
+
 SOURCE_HTML = "html"
 SOURCE_JS = "js"
 SOURCE_SCRAPING_DOM = "scraping_dom"
@@ -46,8 +56,11 @@ SOURCE_SCRAPING_JSON = "scraping_json"
 SOURCE_FILE = "file"
 SOURCE_JSON = "json"
 
+# ---------------------------------------------
+# File parsing
+# ---------------------------------------------
 
-FILE_EXTENSIONS_TO_PARSE= {
+FILE_EXTENSIONS_TO_PARSE = {
     ".pdf",
     ".doc",
     ".docx",
@@ -57,8 +70,12 @@ FILE_EXTENSIONS_TO_PARSE= {
     ".csv"
 }
 
-BAD_EXTENSIONS = (
+# ---------------------------------------------
+# Non-HTML / asset extensions
+# ---------------------------------------------
+
+BAD_EXTENSIONS = {
     ".css", ".js", ".png", ".jpg", ".jpeg", ".gif",
     ".svg", ".ico", ".woff", ".woff2", ".ttf",
     ".zip", ".rar", ".7z"
-)
+}

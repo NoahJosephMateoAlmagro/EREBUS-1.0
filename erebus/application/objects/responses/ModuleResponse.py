@@ -5,6 +5,9 @@ from datetime import datetime
 
 
 class ModuleStatus(str, Enum):
+    """
+    Enumeration representing the execution status of a module.
+    """
     SKIPPED = "SKIPPED"
     SUCCESS = "SUCCESS"
     PARTIAL = "PARTIAL"
@@ -13,6 +16,10 @@ class ModuleStatus(str, Enum):
 
 @dataclass
 class ModuleResponse:
+    """
+    Standard response object returned by all modules.
+    """
+
     module_name: str
     status: ModuleStatus
     metrics: Dict[str, int] = field(default_factory=dict)
@@ -22,6 +29,13 @@ class ModuleResponse:
 
     @property
     def duration_seconds(self) -> Optional[float]:
+        """
+        Computes execution duration in seconds.
+
+        Returns:
+            Optional[float]: Duration in seconds if both timestamps are present,
+            otherwise None.
+        """
         if self.started_at and self.finished_at:
             return (self.finished_at - self.started_at).total_seconds()
         return None

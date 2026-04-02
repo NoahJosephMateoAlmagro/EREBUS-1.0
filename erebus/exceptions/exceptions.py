@@ -1,18 +1,26 @@
 class ErebusError(Exception):
-    """Excepción base del motor EREBUS."""
+    """
+    Base exception for the EREBUS engine.
+    """
     pass
 
 
 class CollectorError(ErebusError):
-    """Error al ejecutar un collector."""
+    """
+    Exception raised when a collector fails.
+    """
     pass
 
 
 class AnalyzerError(ErebusError):
-    """Error al procesar datos en un analyzer."""
+    """
+    Exception raised when an analyzer fails to process data.
+    """
     pass
 
 
 class ConfigurationError(ErebusError):
-    """Error en la configuración del motor."""
+    """
+    Exception raised when there is a configuration issue.
+    """
     pass

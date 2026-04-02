@@ -47,7 +47,9 @@ from application.services.print_debug_service import PrintDebugService
 
 
 class ServiceBuilder:
-
+    """
+       Responsible for constructing and wiring all collectors, parsers and services.
+       """
     def __init__(self, uow, cfg, domain_validator):
         self.uow = uow
         self.cfg = cfg

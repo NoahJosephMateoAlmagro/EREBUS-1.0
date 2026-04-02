@@ -1,7 +1,7 @@
 from datetime import datetime
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from exceptions.exceptions import CollectorError
-from processing.analyzers.DNS_Details_Analyzer import DNS_Details_Analyzer
+from processing.analyzers.DNS_Details_Analyzer import DNSDetailsAnalyzer
 
 
 class DNSContextService:
@@ -45,7 +45,7 @@ class DNSContextService:
 
             metrics["txt_records_found"] = len(txt_records)
 
-            dns_context = DNS_Details_Analyzer.analyze_mail_dns_context(
+            dns_context = DNSDetailsAnalyzer.analyze_mail_dns_context(
                 mx_hosts=mx_hosts,
                 txt_records=txt_records
             )

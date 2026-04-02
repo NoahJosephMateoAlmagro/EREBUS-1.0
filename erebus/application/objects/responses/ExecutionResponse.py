@@ -1,10 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from application.objects.responses.ModuleResponse import ModuleResponse
 
 
 class ExecutionResponse:
+    """
+    Aggregated response representing the result of a full execution.
+
+    """
 
     def __init__(
         self,
@@ -13,10 +17,19 @@ class ExecutionResponse:
         started_at: datetime,
         modules: List[ModuleResponse]
     ):
+        """
+        Initializes the execution response.
+
+        Args:
+            execution_id (str): Unique execution identifier
+            target (str): Target domain or scope
+            started_at (datetime): Execution start timestamp
+            modules (List[ModuleResponse]): List of module responses
+        """
         self.execution_id = execution_id
         self.target = target
-        self.started_at = started_at.utcnow()
-        self.finished_at = datetime.utcnow()
+        self.started_at = started_at
+        self.finished_at = datetime.now(timezone.utc)
 
         self.modules = modules
 
@@ -27,7 +40,12 @@ class ExecutionResponse:
         self.metrics_global = self._compute_global_metrics()
 
     def _compute_global_metrics(self):
+        """
+        Aggregates key metrics across all module responses.
 
+        Returns:
+            dict: Aggregated metrics (emails, credentials, domains)
+        """
         totals = {
             "emails_inserted": 0,
             "credentials_inserted": 0,
@@ -35,7 +53,6 @@ class ExecutionResponse:
         }
 
         for module in self.modules:
-
             metrics = module.metrics or {}
 
             totals["emails_inserted"] += metrics.get("emails_inserted", 0)

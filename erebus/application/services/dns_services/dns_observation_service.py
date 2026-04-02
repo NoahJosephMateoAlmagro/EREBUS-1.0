@@ -2,7 +2,7 @@ from datetime import datetime
 import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from exceptions.exceptions import CollectorError
-from processing.analyzers.DNS_Details_Analyzer import DNS_Details_Analyzer
+from processing.analyzers.DNS_Details_Analyzer import DNSDetailsAnalyzer
 
 
 class DNSObservationService:
@@ -67,7 +67,7 @@ class DNSObservationService:
 
             metrics["cname_records"] += 1
 
-            provider = DNS_Details_Analyzer.detect_provider_from_record(record_value, "CNAME")
+            provider = DNSDetailsAnalyzer.detect_provider_from_record(record_value, "CNAME")
 
             target_resolvable = self.uow.domains.get_domain_resolution_status(
                 context.execution.ID,
@@ -103,7 +103,7 @@ class DNSObservationService:
                     )
                     target_resolvable = False
 
-            exposure_level = DNS_Details_Analyzer.calculate_exposure_level(
+            exposure_level = DNSDetailsAnalyzer.calculate_exposure_level(
                 record_type="CNAME",
                 provider=provider,
                 target_resolvable=target_resolvable
@@ -133,9 +133,9 @@ class DNSObservationService:
 
             metrics["ns_records"] += 1
 
-            provider = DNS_Details_Analyzer.detect_provider_from_record(record_value, "NS")
+            provider = DNSDetailsAnalyzer.detect_provider_from_record(record_value, "NS")
 
-            exposure_level = DNS_Details_Analyzer.calculate_exposure_level(
+            exposure_level = DNSDetailsAnalyzer.calculate_exposure_level(
                 record_type="NS",
                 provider=provider,
                 target_resolvable=None

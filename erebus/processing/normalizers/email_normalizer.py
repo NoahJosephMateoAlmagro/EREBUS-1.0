@@ -4,8 +4,14 @@ import html
 
 
 class EmailAnalyzer:
+    """
+    Analyzer responsible for extracting and normalizing email addresses
+    from raw text using multiple detection techniques.
+    """
 
-    EMAIL_REGEX = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    EMAIL_REGEX = re.compile(
+        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    )
 
     OBFUSCATED_PATTERNS = [
         (r"\s*\[\s*at\s*\]\s*", "@"),
@@ -34,12 +40,12 @@ class EmailAnalyzer:
 
     def extract(self, text: str) -> set[str]:
         """
-        Extrae emails incluyendo:
-        - Emails en claro
-        - Ofuscaciones [at]/[dot]
-        - Concatenaciones JS
-        - HTML entities
-        - Base64
+        Extracts email addresses using multiple techniques:
+        - Plain text emails
+        - Obfuscations ([at], [dot])
+        - JavaScript concatenation
+        - HTML entities and escapes
+        - Base64 decoding
         """
         found = set()
 
@@ -48,25 +54,25 @@ class EmailAnalyzer:
 
         lowered = text.lower()
 
-        # 1️⃣ Emails en claro
-        for e in re.findall(self.EMAIL_REGEX, lowered):
+        # Plain emails
+        for e in self.EMAIL_REGEX.findall(lowered):
             found.add(e)
 
-        # 2️⃣ Sustituciones [at]/[dot]
+        # Obfuscation replacement
         candidate = lowered
         for pattern, repl in self.OBFUSCATED_PATTERNS:
             candidate = re.sub(pattern, repl, candidate)
 
-        for e in re.findall(self.EMAIL_REGEX, candidate):
+        for e in self.EMAIL_REGEX.findall(candidate):
             found.add(e)
 
-        # 3️⃣ Concatenaciones simples tipo "info" + "@" + "example.com"
+        # JS concatenation patterns
         for user, domain in self.CONCAT_REGEX.findall(text):
             email = f"{user}@{domain}".lower()
-            if re.match(self.EMAIL_REGEX, email):
+            if self.EMAIL_REGEX.match(email):
                 found.add(email)
 
-        # 4️⃣ HTML entities y escapes JS
+        # HTML entities and JS escapes
         unescaped = html.unescape(text)
 
         try:
@@ -74,14 +80,14 @@ class EmailAnalyzer:
         except Exception:
             pass
 
-        for e in re.findall(self.EMAIL_REGEX, unescaped.lower()):
+        for e in self.EMAIL_REGEX.findall(unescaped.lower()):
             found.add(e)
 
-        # 5️⃣ Base64 en llamadas atob()
+        # Base64 inside atob()
         for token in self.BASE64_CALL_REGEX.findall(text):
             self._decode_base64_email(token, found)
 
-        # 6️⃣ Base64 suelto
+        # Raw Base64 tokens
         compact = re.sub(r"\s+", "", text)
 
         for token in self.BASE64_TOKEN_REGEX.findall(compact):
@@ -91,7 +97,7 @@ class EmailAnalyzer:
 
     def normalize(self, email: str) -> str | None:
         """
-        Normalización mínima estructural.
+        Performs minimal normalization of an email address.
         """
         if not email:
             return None
@@ -105,7 +111,7 @@ class EmailAnalyzer:
 
     def extract_from_file_text(self, text: str) -> set[str]:
         """
-        Alias semántico para uso en FileParser.
+        Semantic alias for file parsing context.
         """
         return self.extract(text)
 
@@ -113,10 +119,12 @@ class EmailAnalyzer:
     # Internal
     # -------------------------------------------------
 
-    def _decode_base64_email(self, token: str, found: set):
+    def _decode_base64_email(self, token: str, found: set[str]) -> None:
         try:
             decoded = base64.b64decode(token).decode("utf-8", errors="ignore")
-            for e in re.findall(self.EMAIL_REGEX, decoded.lower()):
+
+            for e in self.EMAIL_REGEX.findall(decoded.lower()):
                 found.add(e)
+
         except Exception:
             pass
