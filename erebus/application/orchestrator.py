@@ -33,7 +33,7 @@ class Orchestrator:
             )
             raise TypeError("Invalid configuration: cfg must be a dict")
 
-        required_keys = {"modules", "limits", "timeouts", "tools"}
+        required_keys = {"modules", "limits", "timeouts", "tools", "retries"}
 
         missing = required_keys - cfg.keys()
 

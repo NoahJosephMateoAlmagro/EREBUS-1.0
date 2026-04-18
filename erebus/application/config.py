@@ -7,21 +7,21 @@ APP_CONFIG = {
     },
     "logging": {
         "timezone": "Europe/Madrid",
-        "mode": "INFO" #TRACE/INFO/ERROR/SILENT
+        "mode": "TRACE" #TRACE/INFO/ERROR/SILENT
     },
     "modules": {
         "subdomains": True,
-        "whois": True,
-        "dns": True,
-        "nmap": True,
-        "http_headers": True,
-        "email_passive": True,
-        "crawling": True,
-        "js_parsing": True,
-        "file_parsing": True,
-        "scraping": True,
-        "wayback": True,
-        "shodan": True
+        "whois": False,
+        "dns": False,
+        "nmap": False,
+        "http_headers": False,
+        "email_passive": False,
+        "crawling": False,
+        "js_parsing": False,
+        "file_parsing": False,
+        "scraping": False,
+        "wayback": False,
+        "shodan": False
     },
 
     "limits": {
@@ -82,5 +82,8 @@ APP_CONFIG = {
 
         # Wayback API (CDX)
         "wayback_cdx_api": 25
+    },
+    "retries": {
+        "crtsh_max_attempts": 10
     }
 }

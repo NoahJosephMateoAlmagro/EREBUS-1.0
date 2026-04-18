@@ -64,7 +64,8 @@ class ServiceBuilder:
 
         subdomain_collector = SubdomainCollector(
             timeout=cfg["timeouts"]["http_subdomains"],
-            limit=cfg["limits"]["subdomain_max"]
+            limit=cfg["limits"]["subdomain_max"],
+            max_attempts=cfg["retries"]["crtsh_max_attempts"]
         )
 
         whois_collector = WhoisCollector()
