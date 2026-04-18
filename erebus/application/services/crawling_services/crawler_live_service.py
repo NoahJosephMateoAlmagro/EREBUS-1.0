@@ -18,7 +18,7 @@ class CrawlerLiveService:
         self.timeout = timeout
         self.max_pages = max_pages
 
-    def run(self, context, crawl_urls, sources):
+    def run(self, context, crawl_urls: set[str], sources: dict[str, str]) -> list[dict]:
         """
         Executes live crawling and annotates discovered pages with their origin.
 

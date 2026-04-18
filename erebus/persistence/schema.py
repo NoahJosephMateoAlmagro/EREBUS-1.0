@@ -185,7 +185,9 @@ SCHEMA_SQL = """
             metric_name TEXT NOT NULL,
             metric_value INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(execution_id, module_name, metric_name)
+            UNIQUE(execution_id, module_name, metric_name),
+            FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
+
         );
 
         /* ------------------------

@@ -24,22 +24,22 @@ APP_CONFIG = {
 
     "limits": {
         # DNS
-        "subdomain_max": 20,
-        "dns_max_domains": 20,
+        "subdomain_max": 50,
+        "dns_max_domains": 50,
 
         # Crawling
-        "crawler_live_max_pages": 100,
-        "crawler_wayback_max_pages": 30,
+        "crawler_live_max_pages": 200,
+        "crawler_wayback_max_pages": 50,
         "sitemap_max_urls": 20,
         "robots_max_urls": 20,
 
         # Wayback (CDX)
-        "wayback_max_snapshots": 50,
+        "wayback_max_snapshots": 100,
         "wayback_min_year": 2000,
         "cdx_url_limit":200,
 
         # JS
-        "js_max_scripts": 15,
+        "js_max_scripts": 50,
 
         #Files
           "file_max_size": 25 * 1024 * 1024,

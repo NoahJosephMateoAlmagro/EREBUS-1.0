@@ -22,7 +22,7 @@ class CrawlerProcessingService:
         self.email_analyzer = email_analyzer
         self.cred_parser = cred_parser
 
-    def run(self, context):
+    def run(self, context) -> dict[str, int]:
         """
         Processes crawled pages and returns aggregated metrics.
 
@@ -69,7 +69,12 @@ class CrawlerProcessingService:
 
         return metrics
 
-    def _process_page(self, context, page, metrics) -> None:
+    def _process_page(
+            self,
+            context,
+            page: dict[str, object],
+            metrics: dict[str, int]
+    ) -> None:
         """
         Processes a single crawled page, persists raw crawl data and extracts
         emails and credentials from HTML content.
@@ -104,7 +109,7 @@ class CrawlerProcessingService:
         for raw in extracted_emails:
             metrics["emails_matched_raw"] += 1
 
-            email = self.email_analyzer.normalize_URL(raw)
+            email = self.email_analyzer.normalize(raw)
             if not email:
                 continue
 

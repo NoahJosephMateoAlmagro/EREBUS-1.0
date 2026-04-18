@@ -23,7 +23,18 @@ class CrawlingService:
         self.crawler_wayback_service = crawler_wayback_service
         self.crawler_processing_service = crawler_processing_service
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
+        """
+        Executes crawling workflow by discovering initial seeds, running
+        live and Wayback crawling, and processing the collected results.
+
+        Args:
+            context: Execution context containing target, execution metadata
+                and shared crawling state
+
+        Returns:
+            ModuleResponse: Execution result with status, metrics and errors
+        """
 
         target = context.execution.TARGET
         execution_id = context.execution.ID

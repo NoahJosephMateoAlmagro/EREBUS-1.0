@@ -4,7 +4,8 @@ import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
-
+import shared.utils as Utils
+import shared.constants as C
 
 class ShodanService:
     """
@@ -12,18 +13,16 @@ class ShodanService:
     and enriching discovered hosts with service and port information.
     """
 
-    def __init__(self, shodan_collector, uow, domain_validator):
+    def __init__(self, shodan_collector, uow):
         """
         Args:
             shodan_collector: Collector responsible for interacting with the Shodan API
             uow: Unit of Work for persistence operations
-            domain_validator: Callable used to validate and normalize domains
         """
         self.shodan_collector = shodan_collector
         self.uow = uow
-        self._is_valid_domain = domain_validator
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
         """
         Executes Shodan discovery and host enrichment workflow.
 
@@ -82,7 +81,7 @@ class ShodanService:
             inserted = 0
 
             for subdomain in results.get("subdomains", []):
-                domain = self._is_valid_domain(subdomain)
+                domain = Utils.is_valid_domain(subdomain)
 
                 if not domain:
                     continue
@@ -151,7 +150,7 @@ class ShodanService:
                             "service": service.get("product"),
                             "product": service.get("product"),
                             "version": service.get("version"),
-                            "source": "shodan"
+                            "source": C.SOURCE_SHODAN
                         }
 
                         self.uow.nmap.insert_port(

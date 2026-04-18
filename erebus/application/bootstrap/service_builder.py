@@ -143,8 +143,7 @@ class ServiceBuilder:
 
         subdomain_service = SubdomainService(
             subdomain_collector=subdomain_collector,
-            uow=uow,
-            domain_validator=self.domain_validator
+            uow=uow
         )
 
         whois_service = WhoisService(whois_collector, uow)
@@ -219,8 +218,7 @@ class ServiceBuilder:
 
         shodan_service = ShodanService(
             shodan_collector,
-            uow,
-            self.domain_validator
+            uow
         )
 
 

@@ -5,6 +5,7 @@ from application.objects.responses.ModuleResponse import ModuleResponse, ModuleS
 from exceptions.exceptions import CollectorError
 import shared.constants as C
 from shared.logger import Logger
+import shared.utils as Utils
 
 class CrawlerWaybackService:
     """
@@ -22,27 +23,6 @@ class CrawlerWaybackService:
         self.wayback_collector = wayback_collector
         self.limit = limit
         self.min_year = min_year
-
-    def _is_valid_html_url(self, url: str) -> bool:
-        """
-        Determines whether a URL is a valid HTTP(S) candidate and not a filtered asset type.
-
-        Args:
-            url (str): Original URL to validate
-
-        Returns:
-            bool: True if the URL is accepted, False otherwise
-        """
-        parsed = urlparse(url)
-
-        if not parsed.scheme.startswith("http"):
-            return False
-
-        for ext in C.BAD_EXTENSIONS:
-            if parsed.path.lower().endswith(ext):
-                return False
-
-        return True
 
     def _build_snapshot_url(self, timestamp: str, original: str) -> str:
         """
@@ -102,7 +82,7 @@ class CrawlerWaybackService:
                 if year < self.min_year:
                     continue
 
-                if not self._is_valid_html_url(original):
+                if not Utils.is_valid_html_url(original):
                     continue
 
                 grouped[original].append(entry)

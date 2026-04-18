@@ -1,5 +1,6 @@
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
+import shared.utils as Utils
 
 
 class SeedDiscoveryService:
@@ -17,7 +18,7 @@ class SeedDiscoveryService:
         self.robots_collector = robots_collector
         self.sitemap_collector = sitemap_collector
 
-    def get_seeds(self, context):
+    def get_seeds(self, context) -> tuple[set[str], dict[str, str]]:
         """
         Builds the initial set of crawl seeds and their discovery sources.
 
@@ -34,10 +35,10 @@ class SeedDiscoveryService:
             context=self.__class__.__name__
         )
 
-        crawl_urls = set()
-        sources = {}
+        crawl_urls: set[str] = set()
+        sources: dict[str, str] = {}
 
-        base_urls = self._build_base_urls(target)
+        base_urls = Utils.build_base_urls(target)
 
         for url in base_urls:
             crawl_urls.add(url)
@@ -54,6 +55,11 @@ class SeedDiscoveryService:
                 f"Seed discovery collector error target={target}: {e}",
                 context=self.__class__.__name__
             )
+        except Exception as e:
+            Logger.error(
+                f"Unexpected seed discovery error target={target}: {e}",
+                context=self.__class__.__name__
+            )
 
         Logger.info(
             f"Finished seed discovery target={target} seeds={len(crawl_urls)}",
@@ -62,24 +68,12 @@ class SeedDiscoveryService:
 
         return crawl_urls, sources
 
-    def _build_base_urls(self, domain: str):
-        """
-        Builds the default base URLs for a target domain.
-
-        Args:
-            domain (str): Target domain
-
-        Returns:
-            list[str]: Default base URLs
-        """
-        return [
-            f"https://{domain}",
-            f"https://www.{domain}",
-            f"http://{domain}",
-            f"http://www.{domain}",
-        ]
-
-    def _discover_from_robots_and_sitemap(self, context, urls, sources):
+    def _discover_from_robots_and_sitemap(
+        self,
+        context,
+        urls: set[str],
+        sources: dict[str, str]
+    ) -> None:
         """
         Enriches seed URLs using robots.txt and sitemap sources.
 

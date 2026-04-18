@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -20,7 +20,7 @@ class Logger:
             message (str): Log message
             context (Optional[str]): Optional context (e.g. collector name)
         """
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
         if context:
             print(f"[{timestamp}] [{level}] [{context}] {message}")

@@ -3,7 +3,7 @@ import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
-
+import shared.utils as Utils
 
 class SubdomainService:
     """
@@ -11,7 +11,7 @@ class SubdomainService:
     and persisting new domain entries.
     """
 
-    def __init__(self, subdomain_collector, uow, domain_validator):
+    def __init__(self, subdomain_collector, uow):
         """
         Args:
             subdomain_collector: Collector responsible for retrieving subdomains
@@ -20,7 +20,6 @@ class SubdomainService:
         """
         self.subdomain_collector = subdomain_collector
         self.uow = uow
-        self._valid_domain = domain_validator
 
     def run(self, context) -> ModuleResponse:
         """
@@ -61,7 +60,7 @@ class SubdomainService:
             metrics["subdomains_found"] = len(subdomains)
 
             for s in subdomains:
-                domain = self._valid_domain(s.get("value"))
+                domain = Utils.is_valid_domain(s.get("value"))
 
                 if domain:
                     context.all_domains.add(domain)

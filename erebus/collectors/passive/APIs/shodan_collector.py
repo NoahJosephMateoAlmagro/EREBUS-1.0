@@ -3,7 +3,7 @@ import requests
 from collectors.base import Collector
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
-
+import shared.constants as C
 
 class ShodanCollector(Collector):
     """
