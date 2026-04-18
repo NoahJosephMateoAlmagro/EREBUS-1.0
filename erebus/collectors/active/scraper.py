@@ -12,7 +12,7 @@ class Scraper:
     Scraper that loads a web page using Playwright and captures
     final URL after redirects, full HTML content and JSON responses (same-domain only)
     """
-    def __init__(self, timeout: int = 30000):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): Page load timeout in milliseconds

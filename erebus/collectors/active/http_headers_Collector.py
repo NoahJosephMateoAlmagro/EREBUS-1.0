@@ -13,7 +13,7 @@ class HTTPHeadersCollector(Collector):
 
     Performs a HEAD request and normalizes headers to lowercase.
     """
-    def __init__(self, timeout: int = 6):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): HTTP request timeout

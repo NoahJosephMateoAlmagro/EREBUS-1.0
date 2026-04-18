@@ -13,7 +13,7 @@ class SitemapCollector(Collector):
 
     """
 
-    def __init__(self, timeout: int = 8, max_urls: int = 200):
+    def __init__(self, timeout: int, max_urls: int):
         """
         Args:
             timeout (int): HTTP request timeout

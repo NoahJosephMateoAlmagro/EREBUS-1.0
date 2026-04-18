@@ -10,7 +10,7 @@ class RobotsCollector(Collector):
     Collector that retrieves and parses robots.txt for a target domain.
     """
 
-    def __init__(self, timeout: int = 8):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): HTTP request timeout

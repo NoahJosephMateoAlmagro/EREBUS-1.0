@@ -14,7 +14,7 @@ class SubdomainCollector(Collector):
       into a consistent format for further processing.
       """
 
-    def __init__(self, timeout: int = 8, limit: int = 20):
+    def __init__(self, timeout: int , limit: int ):
         """
         Args:
             timeout (int): Request timeout

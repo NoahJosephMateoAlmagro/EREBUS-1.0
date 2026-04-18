@@ -133,9 +133,8 @@ class WaybackCollector(Collector):
       that can later be filtered and processed by other components.
       """
 
-    CDX_URL = "https://web.archive.org/cdx/search/cdx"
 
-    def __init__(self, timeout: int = 10, cdx_limit: int = 2000):
+    def __init__(self, timeout: int, cdx_limit: int):
 
         """
         Args:
@@ -175,7 +174,7 @@ class WaybackCollector(Collector):
 
                 # Request to Wayback CDX API
                 r = requests.get(
-                    self.CDX_URL,
+                    C.CDX_URL,
                     params=params,
                     timeout=self.timeout,
                     headers={"User-Agent": C.USER_AGENT}

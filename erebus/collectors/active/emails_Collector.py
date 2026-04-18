@@ -12,7 +12,7 @@ class EmailCollector(Collector):
     to later extract emails.
     """
 
-    def __init__(self, timeout: int = 8):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): HTTP request timeout

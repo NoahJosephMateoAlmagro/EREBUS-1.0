@@ -13,7 +13,7 @@ class DNSCollector(Collector):
        Uses a custom resolver with predefined nameservers.
        """
 
-    def __init__(self, timeout: int = 8):
+    def __init__(self, timeout: int):
 
         """
          Args:

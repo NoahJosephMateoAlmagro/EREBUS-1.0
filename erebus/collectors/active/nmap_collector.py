@@ -11,7 +11,7 @@ class NmapCollector(Collector):
     Collector that executes Nmap scans on given targets
     and returns raw XML output.
     """
-    def __init__(self, timeout: int = 600, nmap_path: str | None = None):
+    def __init__(self, timeout: int, nmap_path: str | None = None):
         """
         Args:
             timeout (int): Execution timeout in seconds

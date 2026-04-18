@@ -11,7 +11,7 @@ class DNS_NS_Collector(Collector):
     """
 
 
-    def __init__(self, timeout: int = 8):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): DNS resolution timeout

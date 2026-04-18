@@ -14,8 +14,8 @@ class Crawler:
     def __init__(
         self,
         start_url: Union[str, List[str]],
-        max_pages: int = 30,
-        timeout: int = 8,
+        max_pages: int,
+        timeout: int,
         allowed_domain: str | None = None
     ):
         """

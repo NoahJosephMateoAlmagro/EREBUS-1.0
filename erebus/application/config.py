@@ -7,7 +7,7 @@ APP_CONFIG = {
     },
     "logging": {
         "timezone": "Europe/Madrid",
-        "mode": "TRACE" #TRACE/INFO/ERROR/SILENT
+        "mode": "INFO" #TRACE/INFO/ERROR/SILENT
     },
     "modules": {
         "subdomains": True,

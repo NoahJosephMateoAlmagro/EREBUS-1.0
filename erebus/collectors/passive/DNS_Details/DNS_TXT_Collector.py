@@ -10,7 +10,7 @@ class DNS_TXT_Collector(Collector):
      Collector that retrieves TXT DNS records for a target domain.
      """
 
-    def __init__(self, timeout: int = 8):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): DNS resolution timeout

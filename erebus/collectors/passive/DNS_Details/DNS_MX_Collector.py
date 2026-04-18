@@ -9,7 +9,7 @@ class DNS_MX_Collector(Collector):
     """
     Collector that retrieves MX (Mail Exchange) records for a target domain.
     """
-    def __init__(self, timeout: int = 8):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): DNS resolution timeout

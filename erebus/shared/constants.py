@@ -216,3 +216,9 @@ BAD_EXTENSIONS = {
     ".svg", ".ico", ".woff", ".woff2", ".ttf",
     ".zip", ".rar", ".7z"
 }
+
+# ---------------------------------------------
+# Collectors variables
+# ---------------------------------------------
+
+CDX_URL = "https://web.archive.org/cdx/search/cdx"

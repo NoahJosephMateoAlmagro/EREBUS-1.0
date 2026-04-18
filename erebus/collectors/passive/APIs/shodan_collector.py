@@ -14,7 +14,7 @@ class ShodanCollector(Collector):
 
     BASE_URL = "https://api.shodan.io"
 
-    def __init__(self, timeout: int = 10):
+    def __init__(self, timeout: int):
         """
         Args:
             timeout (int): HTTP request timeout
