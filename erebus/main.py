@@ -76,7 +76,27 @@ def main():
 
     finally:
 
-        uow.executions.update(execution)
+        try:
+
+            uow.executions.update(execution)
+
+            Logger.info(
+
+                f"Execution persisted execution_id={execution.ID} status={execution.STATUS}",
+
+                context="Main"
+
+            )
+
+        except Exception as e:
+
+            Logger.error(
+
+                f"Failed to persist execution execution_id={execution.ID}: {e}",
+
+                context="Main"
+
+            )
 
         Logger.info(
             f"Execution persisted execution_id={execution.ID} status={execution.STATUS}",

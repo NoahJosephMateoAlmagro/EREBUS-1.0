@@ -25,8 +25,10 @@ class ConfigurationError(ErebusError):
     """
     pass
 
+
 class ParserError(ErebusError):
     """
     Exception raised when a parser fails to process input data.
     """
     pass
+

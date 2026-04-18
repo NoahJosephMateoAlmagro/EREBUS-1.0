@@ -1,3 +1,7 @@
+import sqlite3
+from exceptions.exceptions import DatabaseError
+
+
 class BaseRepository:
     """
     Base repository providing low-level database operations.
@@ -5,7 +9,8 @@ class BaseRepository:
     This class centralizes common database access methods used by all repositories,
     including query execution and data retrieval.
 
-    It assumes a valid SQLite connection and performs immediate commits on write operations.
+    It assumes a valid SQLite connection.
+    Transaction control should be handled by the UnitOfWork.
     """
 
     def __init__(self, conn):
@@ -21,15 +26,29 @@ class BaseRepository:
         """
         Executes a write operation (INSERT, UPDATE, DELETE).
 
-        This method automatically commits the transaction after execution.
-
         Args:
             query: SQL query string
             params: Query parameters tuple
+
+        Returns:
+            sqlite3.Cursor: Cursor after execution
         """
-        cursor = self.conn.cursor()
-        cursor.execute(query, params)
-        self.conn.commit()
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, params)
+            return cursor
+
+        except sqlite3.IntegrityError as e:
+            raise DatabaseError(str(e)) from e
+
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Operational DB error: {e}") from e
+
+        except sqlite3.ProgrammingError as e:
+            raise DatabaseError(f"Programming DB error: {e}") from e
+
+        except sqlite3.DatabaseError as e:
+            raise DatabaseError(f"Database error: {e}") from e
 
     def _fetchone(self, query, params=()):
         """
@@ -42,9 +61,19 @@ class BaseRepository:
         Returns:
             A single row or None if no result is found
         """
-        cursor = self.conn.cursor()
-        cursor.execute(query, params)
-        return cursor.fetchone()
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchone()
+
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Operational DB error: {e}") from e
+
+        except sqlite3.ProgrammingError as e:
+            raise DatabaseError(f"Programming DB error: {e}") from e
+
+        except sqlite3.DatabaseError as e:
+            raise DatabaseError(f"Database error: {e}") from e
 
     def _fetchall(self, query, params=()):
         """
@@ -57,6 +86,16 @@ class BaseRepository:
         Returns:
             List of rows
         """
-        cursor = self.conn.cursor()
-        cursor.execute(query, params)
-        return cursor.fetchall()
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchall()
+
+        except sqlite3.OperationalError as e:
+            raise DatabaseError(f"Operational DB error: {e}") from e
+
+        except sqlite3.ProgrammingError as e:
+            raise DatabaseError(f"Programming DB error: {e}") from e
+
+        except sqlite3.DatabaseError as e:
+            raise DatabaseError(f"Database error: {e}") from e
