@@ -43,11 +43,11 @@ class CrawlerProcessingService:
         metrics = {
             "pages_processed": 0,
             "emails_matched_raw": 0,
-            "emails_normalized_ok": 0,
-            "emails_skipped_duplicate": 0,
+            "emails_normalized": 0,
+            "emails_duplicates_skipped": 0,
             "emails_inserted": 0,
             "credentials_matched_raw": 0,
-            "credentials_skipped_duplicate": 0,
+            "credentials_duplicates_skipped": 0,
             "credentials_inserted": 0
         }
 
@@ -113,10 +113,10 @@ class CrawlerProcessingService:
             if not email:
                 continue
 
-            metrics["emails_normalized_ok"] += 1
+            metrics["emails_normalized"] += 1
 
             if not context.is_new_email(email):
-                metrics["emails_skipped_duplicate"] += 1
+                metrics["emails_duplicates_skipped"] += 1
                 continue
 
             self.uow.emails.insert_email(
@@ -137,7 +137,7 @@ class CrawlerProcessingService:
             metrics["credentials_matched_raw"] += 1
 
             if not context.is_new_credential(ctype, value):
-                metrics["credentials_skipped_duplicate"] += 1
+                metrics["credentials_duplicates_skipped"] += 1
                 continue
 
             self.uow.credentials.insert_credential(

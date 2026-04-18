@@ -56,17 +56,24 @@ class ScrapingService:
             "pages_succeeded": 0,
             "pages_failed": 0,
             "emails_matched_raw": 0,
-            "emails_normalized_ok": 0,
-            "emails_skipped_duplicate": 0,
+            "emails_normalized": 0,
+            "emails_duplicates_skipped": 0,
             "emails_inserted": 0,
             "credentials_matched_raw": 0,
-            "credentials_skipped_duplicate": 0,
+            "credentials_duplicates_skipped": 0,
             "credentials_inserted": 0
         }
 
         if not context.live_results:
+            response.status = ModuleStatus.SKIPPED
             response.metrics = metrics
             response.finished_at = datetime.utcnow()
+
+            Logger.info(
+                f"Skipping scraping module execution_id={execution_id} target={target} "
+                f"because there are no live results to process",
+                context=self.__class__.__name__
+            )
 
             Logger.info(
                 f"Finished scraping module execution_id={execution_id} "
@@ -112,6 +119,15 @@ class ScrapingService:
                         f"target={target} url={page.get('url', 'unknown')}: {e}",
                         context=self.__class__.__name__
                     )
+
+            if metrics["pages_attempted"] == 0:
+                response.status = ModuleStatus.SKIPPED
+            elif metrics["pages_succeeded"] == 0:
+                response.status = ModuleStatus.FAILED
+            elif metrics["pages_failed"] > 0:
+                response.status = ModuleStatus.PARTIAL
+            else:
+                response.status = ModuleStatus.SUCCESS
 
             response.metrics = metrics
 
@@ -163,10 +179,10 @@ class ScrapingService:
             if not email:
                 continue
 
-            metrics["emails_normalized_ok"] += 1
+            metrics["emails_normalized"] += 1
 
             if not context.is_new_email(email):
-                metrics["emails_skipped_duplicate"] += 1
+                metrics["emails_duplicates_skipped"] += 1
                 continue
 
             self.uow.emails.insert_email(
@@ -186,7 +202,7 @@ class ScrapingService:
             metrics["credentials_matched_raw"] += 1
 
             if not context.is_new_credential(ctype, value):
-                metrics["credentials_skipped_duplicate"] += 1
+                metrics["credentials_duplicates_skipped"] += 1
                 continue
 
             self.uow.credentials.insert_credential(
@@ -210,10 +226,10 @@ class ScrapingService:
             if not email:
                 continue
 
-            metrics["emails_normalized_ok"] += 1
+            metrics["emails_normalized"] += 1
 
             if not context.is_new_email(email):
-                metrics["emails_skipped_duplicate"] += 1
+                metrics["emails_duplicates_skipped"] += 1
                 continue
 
             self.uow.emails.insert_email(
@@ -234,7 +250,7 @@ class ScrapingService:
                 metrics["credentials_matched_raw"] += 1
 
                 if not context.is_new_credential(ctype, value):
-                    metrics["credentials_skipped_duplicate"] += 1
+                    metrics["credentials_duplicates_skipped"] += 1
                     continue
 
                 self.uow.credentials.insert_credential(

@@ -74,7 +74,6 @@ class CrawlingService:
             wayback_response = self.crawler_wayback_service.run(target)
 
             if wayback_response.status == ModuleStatus.FAILED:
-                response.status = ModuleStatus.FAILED
                 response.errors.extend(wayback_response.errors)
 
                 Logger.error(
@@ -83,16 +82,26 @@ class CrawlingService:
                     context=self.__class__.__name__
                 )
 
-                return response
+                wayback_results = []
 
-            wayback_results = wayback_response.data or []
-            metrics["wayback_pages"] = len(wayback_results)
+                if live_results:
+                    response.status = ModuleStatus.PARTIAL
+                else:
+                    response.status = ModuleStatus.FAILED
+            else:
+                wayback_results = wayback_response.data or []
+                metrics["wayback_pages"] = len(wayback_results)
 
-            if wayback_response.metrics:
-                metrics.update({
-                    f"wayback_{k}": v
-                    for k, v in wayback_response.metrics.items()
-                })
+                if wayback_response.metrics:
+                    metrics.update({
+                        f"wayback_{k}": v
+                        for k, v in wayback_response.metrics.items()
+                    })
+
+                if wayback_response.status == ModuleStatus.PARTIAL:
+                    response.status = ModuleStatus.PARTIAL
+                elif wayback_response.status == ModuleStatus.SKIPPED and response.status != ModuleStatus.PARTIAL:
+                    response.status = ModuleStatus.SUCCESS
 
             # Merge results
             context.live_results = live_results
@@ -101,9 +110,13 @@ class CrawlingService:
 
             metrics["total_pages"] = len(context.crawl_results)
 
+            if metrics["total_pages"] == 0 and response.status != ModuleStatus.FAILED:
+                response.status = ModuleStatus.SKIPPED
+
             # Processing
-            processing_metrics = self.crawler_processing_service.run(context) or {}
-            metrics.update(processing_metrics)
+            if context.crawl_results:
+                processing_metrics = self.crawler_processing_service.run(context) or {}
+                metrics.update(processing_metrics)
 
             response.metrics = metrics
 

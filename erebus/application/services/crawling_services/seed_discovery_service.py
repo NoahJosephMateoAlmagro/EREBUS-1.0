@@ -85,8 +85,8 @@ class SeedDiscoveryService:
         target = context.execution.TARGET
         limits = context.cfg.get("limits", {})
 
-        max_robots = int(limits.get("robots_max_urls", 0))
-        max_sitemap_urls = int(limits.get("sitemap_max_urls", 0))
+        max_robots = int(context.cfg["limits"]["robots_max_urls"])
+        max_sitemap_urls = int(context.cfg["limits"]["sitemap_max_urls"])
 
         robots_added = 0
         sitemap_added = 0

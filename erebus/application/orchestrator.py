@@ -33,7 +33,7 @@ class Orchestrator:
             )
             raise TypeError("Invalid configuration: cfg must be a dict")
 
-        required_keys = {"modules", "limits", "timeouts"}
+        required_keys = {"modules", "limits", "timeouts", "tools"}
 
         missing = required_keys - cfg.keys()
 
@@ -54,7 +54,8 @@ class Orchestrator:
 
         Logger.info("Starting execution", context="Orchestrator")
 
-        builder = ServiceBuilder(self.uow, cfg, Utils.is_valid_domain)
+
+        builder = ServiceBuilder(self.uow, cfg, Utils.validate_and_normalize_domain)
         services = builder.build()
 
         context = ExecutionContext(execution, cfg)
@@ -113,7 +114,7 @@ class Orchestrator:
         # --------------------------------
 
         Logger.info("PHASE: SUBDOMAINS", context="Orchestrator")
-        execute("subdomains", "subdomain")
+        execute("subdomains", "subdomains")
 
         Logger.info("PHASE: WHOIS", context="Orchestrator")
         execute("whois", "whois")
@@ -130,8 +131,8 @@ class Orchestrator:
         parallel_modules = [
             ("nmap", "nmap"),
             ("shodan", "shodan"),
-            ("emails_passive", "emails_passive"),
-            ("crawler", "crawling"),
+            ("email_passive", "email_passive"),
+            ("crawling", "crawling"),
         ]
 
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -153,8 +154,8 @@ class Orchestrator:
         Logger.info("PHASE: CONTENT PARSING", context="Orchestrator")
 
         parsers = [
-            ("js_parsing", "js"),
-            ("file_parsing", "file"),
+            ("js_parsing", "js_parsing"),
+            ("file_parsing", "file_parsing"),
         ]
 
         with ThreadPoolExecutor(max_workers=2) as executor:

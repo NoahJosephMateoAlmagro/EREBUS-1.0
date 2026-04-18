@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 
 import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
-from exceptions.exceptions import  ParserError
+from exceptions.exceptions import ParserError
 from shared.logger import Logger
 
 
@@ -39,6 +39,7 @@ class JSParsingService:
         """
         target = context.execution.TARGET
         execution_id = context.execution.ID
+        scripts_limit = int(context.cfg["limits"]["js_max_scripts"])
 
         Logger.info(
             f"Starting JS parsing module execution_id={execution_id} target={target}",
@@ -52,21 +53,27 @@ class JSParsingService:
         )
 
         metrics = {
-            "scripts_limit": int(context.cfg["limits"]["js_max_scripts"]),
-            "scripts_failed":0,
+            "scripts_failed": 0,
             "scripts_processed": 0,
             "emails_matched_raw": 0,
-            "emails_normalized_ok": 0,
-            "emails_skipped_duplicate": 0,
+            "emails_normalized": 0,
+            "emails_duplicates_skipped": 0,
             "emails_inserted": 0,
             "credentials_matched_raw": 0,
-            "credentials_skipped_duplicate": 0,
+            "credentials_duplicates_skipped": 0,
             "credentials_inserted": 0
         }
 
         if not context.live_results:
+            response.status = ModuleStatus.SKIPPED
             response.metrics = metrics
             response.finished_at = datetime.utcnow()
+
+            Logger.info(
+                f"Skipping JS parsing module execution_id={execution_id} target={target} "
+                f"because there are no live results to process",
+                context=self.__class__.__name__
+            )
 
             Logger.info(
                 f"Finished JS parsing module execution_id={execution_id} "
@@ -78,7 +85,7 @@ class JSParsingService:
 
         try:
             for page in context.live_results:
-                if metrics["scripts_processed"] >= metrics["scripts_limit"]:
+                if metrics["scripts_processed"] >= scripts_limit:
                     break
 
                 try:
@@ -86,8 +93,7 @@ class JSParsingService:
                     if not page_url or "@" in page_url:
                         continue
 
-                    self._process_page(context, page, metrics, response)
-
+                    self._process_page(context, page, metrics, response, scripts_limit)
 
                 except Exception as e:
                     Logger.error(
@@ -95,6 +101,15 @@ class JSParsingService:
                         f"target={target} url={page.get('url', 'unknown')}: {e}",
                         context=self.__class__.__name__
                     )
+
+            if metrics["scripts_processed"] == 0 and metrics["scripts_failed"] == 0:
+                response.status = ModuleStatus.SKIPPED
+            elif metrics["scripts_processed"] == 0 and metrics["scripts_failed"] > 0:
+                response.status = ModuleStatus.FAILED
+            elif metrics["scripts_failed"] > 0:
+                response.status = ModuleStatus.PARTIAL
+            else:
+                response.status = ModuleStatus.SUCCESS
 
             response.metrics = metrics
 
@@ -118,7 +133,7 @@ class JSParsingService:
 
         return response
 
-    def _process_page(self, context, page, metrics, response) -> None:
+    def _process_page(self, context, page, metrics, response, scripts_limit) -> None:
         """
         Processes JavaScript references from a single page result.
 
@@ -145,7 +160,7 @@ class JSParsingService:
         scripts = page.get("scripts", []) or []
 
         for script_url in scripts:
-            if metrics["scripts_processed"] >= metrics["scripts_limit"]:
+            if metrics["scripts_processed"] >= scripts_limit:
                 break
 
             try:
@@ -190,6 +205,7 @@ class JSParsingService:
                     f"Unexpected script error in {script_url}: {e}"
                 )
                 continue
+
     def _process_emails(self, context, parsed, script_url, technique, metrics) -> None:
         """
         Extracts, normalizes and persists emails from parsed JavaScript content.
@@ -208,10 +224,10 @@ class JSParsingService:
             if not email:
                 continue
 
-            metrics["emails_normalized_ok"] += 1
+            metrics["emails_normalized"] += 1
 
             if not context.is_new_email(email):
-                metrics["emails_skipped_duplicate"] += 1
+                metrics["emails_duplicates_skipped"] += 1
                 continue
 
             self.uow.emails.insert_email(
@@ -243,7 +259,7 @@ class JSParsingService:
             metrics["credentials_matched_raw"] += 1
 
             if not context.is_new_credential(ctype, value):
-                metrics["credentials_skipped_duplicate"] += 1
+                metrics["credentials_duplicates_skipped"] += 1
                 continue
 
             self.uow.credentials.insert_credential(

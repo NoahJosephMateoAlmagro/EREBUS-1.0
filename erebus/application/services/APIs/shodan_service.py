@@ -5,7 +5,7 @@ from application.objects.responses.ModuleResponse import ModuleResponse, ModuleS
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
 import shared.utils as Utils
-import shared.constants as C
+
 
 class ShodanService:
     """
@@ -51,7 +51,8 @@ class ShodanService:
             "domains_inserted": 0,
             "ips_discovered": 0,
             "hosts_found": 0,
-            "ports_discovered": 0
+            "host_enrichment_failed": 0,
+            "ports_found": 0
         }
 
         try:
@@ -81,7 +82,7 @@ class ShodanService:
             inserted = 0
 
             for subdomain in results.get("subdomains", []):
-                domain = Utils.is_valid_domain(subdomain)
+                domain = Utils.validate_and_normalize_domain(subdomain)
 
                 if not domain:
                     continue
@@ -158,15 +159,20 @@ class ShodanService:
                             result
                         )
 
-                        metrics["ports_discovered"] += 1
+                        metrics["ports_found"] += 1
 
                 except Exception as e:
+                    metrics["host_enrichment_failed"] += 1
+
                     Logger.error(
                         f"Shodan host enrichment error execution_id={execution_id} "
                         f"target={target} ip={ip}: {e}",
                         context=self.__class__.__name__
                     )
                     continue
+
+            if metrics["host_enrichment_failed"] > 0:
+                response.status = ModuleStatus.PARTIAL
 
             response.metrics = metrics
 

@@ -43,10 +43,21 @@ class WhoisService:
         )
 
         metrics = {
-            "whois_found": 0
+            "whois_record_found": 0
         }
 
         try:
+            if target.endswith(".es"):
+                response.status = ModuleStatus.SKIPPED
+
+                Logger.info(
+                    f"Skipping WHOIS module for target={target} because .es domains are not supported",
+                    context=self.__class__.__name__
+                )
+
+                response.metrics = metrics
+                return response
+
             whois_data = self.whois_collector.collect(target)
 
             if whois_data:
@@ -55,7 +66,7 @@ class WhoisService:
                     target,
                     whois_data
                 )
-                metrics["whois_found"] = 1
+                metrics["whois_record_found"] = 1
 
             response.metrics = metrics
 
@@ -85,6 +96,5 @@ class WhoisService:
                 f"status={response.status} metrics={metrics}",
                 context=self.__class__.__name__
             )
-
 
         return response

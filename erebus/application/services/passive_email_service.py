@@ -1,6 +1,7 @@
 from datetime import datetime
 import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
+from shared.logger import Logger
 
 
 class EmailPassiveService:
@@ -22,14 +23,19 @@ class EmailPassiveService:
             "pages_fetched": 0,
 
             "emails_matched_raw": 0,
-            "emails_normalized_ok": 0,
-            "emails_skipped_duplicate": 0,
+            "emails_normalized": 0,
+            "emails_duplicates_skipped": 0,
             "emails_inserted": 0
         }
 
         try:
             pages = self.email_collector.collect(context.execution.TARGET)
             metrics["pages_fetched"] = len(pages)
+
+            if not pages:
+                response.status = ModuleStatus.SKIPPED
+                response.metrics = metrics
+                return response
 
             for page in pages:
                 html = page.get("html", "") or ""
@@ -44,10 +50,10 @@ class EmailPassiveService:
                     if not email:
                         continue
 
-                    metrics["emails_normalized_ok"] += 1
+                    metrics["emails_normalized"] += 1
 
                     if not context.is_new_email(email):
-                        metrics["emails_skipped_duplicate"] += 1
+                        metrics["emails_duplicates_skipped"] += 1
                         continue
 
                     self.uow.emails.insert_email(
@@ -66,6 +72,12 @@ class EmailPassiveService:
         except Exception as e:
             response.status = ModuleStatus.FAILED
             response.errors.append(f"Email passive error: {e}")
+
+            Logger.error(
+                f"Email passive error execution_id={context.execution.ID} "
+                f"target={context.execution.TARGET}: {e}",
+                context=self.__class__.__name__
+            )
 
         finally:
             response.finished_at = datetime.utcnow()

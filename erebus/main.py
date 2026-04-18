@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from application.execution import Execution
 from application.orchestrator import Orchestrator
 from persistence.database import Database
@@ -11,6 +13,11 @@ def main():
     Entry point of the EREBUS engine.
 
     """
+
+    Logger.configure(
+        timezone=APP_CONFIG["logging"]["timezone"],
+        mode=APP_CONFIG["logging"]["mode"]
+    )
 
     Logger.info("Starting EREBUS", context="Main")
 
@@ -42,12 +49,7 @@ def main():
     orchestrator = Orchestrator(uow)
 
     try:
-
-        cfg = {
-            "modules": APP_CONFIG.get("modules", {}),
-            "limits": APP_CONFIG.get("limits", {}),
-            "timeouts": APP_CONFIG.get("timeouts", {})
-        }
+        cfg = deepcopy(APP_CONFIG)
 
         Logger.info(
             f"Running orchestrator execution_id={execution.ID} target={execution.TARGET}",

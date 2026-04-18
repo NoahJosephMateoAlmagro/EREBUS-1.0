@@ -52,12 +52,25 @@ class DNSResolutionService:
             "domains_checked": 0,
             "domains_resolvable": 0,
             "domains_not_resolvable": 0,
+            "domains_failed": 0,
             "records_inserted": 0
         }
 
         try:
             max_dns = int(context.cfg["limits"]["dns_max_domains"])
             domains_to_resolve = list(context.all_domains)[:max_dns]
+
+            if not domains_to_resolve:
+                response.status = ModuleStatus.SKIPPED
+                response.metrics = metrics
+
+                Logger.info(
+                    f"Skipping DNS resolution module execution_id={execution_id} target={target} "
+                    f"because there are no domains to resolve",
+                    context=self.__class__.__name__
+                )
+
+                return response
 
             # Resolve each discovered domain independently
             for domain in domains_to_resolve:
@@ -67,46 +80,58 @@ class DNSResolutionService:
 
                 metrics["domains_checked"] += 1
 
-                dns_results = self.dns_collector.collect(clean_domain)
+                try:
+                    dns_results = self.dns_collector.collect(clean_domain)
 
-                if dns_results:
-                    metrics["domains_resolvable"] += 1
+                    if dns_results:
+                        metrics["domains_resolvable"] += 1
 
-                    self.uow.domains.update_domain_status(
-                        execution_id,
-                        clean_domain,
-                        C.DOMAIN_STATUS_RESOLVABLE
-                    )
-
-                    for record in dns_results:
-                        self.uow.domains.insert_resolved_domain(
+                        self.uow.domains.update_domain_status(
                             execution_id,
-                            record["domain"],
-                            record["ip"],
-                            record["source"]
+                            clean_domain,
+                            C.DOMAIN_STATUS_RESOLVABLE
                         )
-                        metrics["records_inserted"] += 1
 
-                else:
-                    metrics["domains_not_resolvable"] += 1
+                        for record in dns_results:
+                            self.uow.domains.insert_resolved_domain(
+                                execution_id,
+                                record["domain"],
+                                record["ip"],
+                                record["source"]
+                            )
+                            metrics["records_inserted"] += 1
 
-                    self.uow.domains.update_domain_status(
-                        execution_id,
-                        clean_domain,
-                        C.DOMAIN_STATUS_NOT_RESOLVABLE
+                    else:
+                        metrics["domains_not_resolvable"] += 1
+
+                        self.uow.domains.update_domain_status(
+                            execution_id,
+                            clean_domain,
+                            C.DOMAIN_STATUS_NOT_RESOLVABLE
+                        )
+
+                except CollectorError as e:
+                    metrics["domains_failed"] += 1
+                    response.errors.append(f"DNS resolution failed for {clean_domain}: {e}")
+
+                    Logger.error(
+                        f"DNS resolution collector error execution_id={execution_id} "
+                        f"target={target} domain={clean_domain}: {e}",
+                        context=self.__class__.__name__
                     )
+
+                    continue
+
+            if metrics["domains_checked"] == 0:
+                response.status = ModuleStatus.SKIPPED
+            elif metrics["domains_failed"] == 0:
+                response.status = ModuleStatus.SUCCESS
+            elif metrics["domains_failed"] < metrics["domains_checked"]:
+                response.status = ModuleStatus.PARTIAL
+            else:
+                response.status = ModuleStatus.FAILED
 
             response.metrics = metrics
-
-        except CollectorError as e:
-            response.status = ModuleStatus.FAILED
-            response.errors.append(str(e))
-
-            Logger.error(
-                f"DNS resolution collector error execution_id={execution_id} "
-                f"target={target}: {e}",
-                context=self.__class__.__name__
-            )
 
         except Exception as e:
             response.status = ModuleStatus.FAILED

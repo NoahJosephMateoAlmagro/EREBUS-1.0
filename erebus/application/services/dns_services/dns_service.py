@@ -50,30 +50,35 @@ class DNSService:
 
         metrics = {}
         errors = []
+        results = []
 
         try:
             context_result = self.context_service.run(context)
             resolution_result = self.resolution_service.run(context)
             observation_result = self.observation_service.run(context)
 
-            # Aggregate metrics and errors from mandatory DNS subservices
-            for result in [context_result, resolution_result, observation_result]:
-                metrics.update(result.metrics)
-
-                if result.status == ModuleStatus.FAILED:
-                    response.status = ModuleStatus.FAILED
-
-                errors.extend(result.errors)
+            results.extend([context_result, resolution_result, observation_result])
 
             # Run optional HTTP headers subservice if enabled
             if context.cfg["modules"].get("http_headers"):
                 headers_result = self.headers_service.run(context)
-                metrics.update(headers_result.metrics)
+                results.append(headers_result)
 
-                if headers_result.status == ModuleStatus.FAILED:
-                    response.status = ModuleStatus.FAILED
+            # Aggregate metrics and errors from executed subservices
+            for result in results:
+                metrics.update(result.metrics)
+                errors.extend(result.errors)
 
-                errors.extend(headers_result.errors)
+            statuses = [result.status for result in results]
+
+            if statuses and all(status == ModuleStatus.SUCCESS for status in statuses):
+                response.status = ModuleStatus.SUCCESS
+            elif statuses and all(status == ModuleStatus.SKIPPED for status in statuses):
+                response.status = ModuleStatus.SKIPPED
+            elif statuses and all(status == ModuleStatus.FAILED for status in statuses):
+                response.status = ModuleStatus.FAILED
+            else:
+                response.status = ModuleStatus.PARTIAL
 
             response.metrics = metrics
             response.errors = errors

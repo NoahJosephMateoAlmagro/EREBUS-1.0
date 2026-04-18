@@ -48,6 +48,28 @@ EXECUTION_STATUS_FINISHED = "finished"
 EXECUTION_STATUS_ERROR = "error"
 
 # ---------------------------------------------
+# Logging
+# ---------------------------------------------
+
+LOG_MODE_TRACE = "TRACE"
+LOG_MODE_INFO = "INFO"
+LOG_MODE_ERROR = "ERROR"
+LOG_MODE_SILENT = "SILENT"
+
+LOG_MODE_PRIORITIES = {
+    LOG_MODE_TRACE: 10,
+    LOG_MODE_INFO: 20,
+    LOG_MODE_ERROR: 30,
+    LOG_MODE_SILENT: 100,
+}
+
+LOG_LEVEL_PRIORITIES = {
+    LOG_MODE_TRACE: 10,
+    LOG_MODE_INFO: 20,
+    LOG_MODE_ERROR: 30,
+}
+
+# ---------------------------------------------
 # Sources
 # ---------------------------------------------
 
@@ -91,6 +113,7 @@ TOKEN_REGEX = re.compile(
     r"\b(api[_-]?key|token|secret)[\w\-]*\s*=\s*['\"]([^'\"\s]{8,})['\"]",
     re.IGNORECASE
 )
+
 URL_REGEX = r"https?://[^\s\"']+"
 USER_AGENT = "EREBUS/1.0"
 
@@ -183,6 +206,7 @@ NS_PROVIDER_PATTERNS = {
 }
 
 RESOLVER_NAMESERVERS = ["8.8.8.8", "1.1.1.1"]
+
 # ---------------------------------------------
 # Non-HTML / asset extensions
 # ---------------------------------------------

@@ -13,7 +13,7 @@ class CrawlerWaybackService:
     results into crawlable snapshot URLs.
     """
 
-    def __init__(self, wayback_collector, limit=50, min_year=2008):
+    def __init__(self, wayback_collector, limit: int, min_year: int):
         """
         Args:
             wayback_collector: Collector responsible for retrieving Wayback entries
@@ -37,7 +37,7 @@ class CrawlerWaybackService:
         """
         return f"https://web.archive.org/web/{timestamp}/{original}"
 
-    def run(self, domain: str) -> ModuleResponse | None:
+    def run(self, domain: str) -> ModuleResponse:
         """
         Executes Wayback URL discovery workflow.
 
@@ -68,6 +68,12 @@ class CrawlerWaybackService:
             raw_entries = self.wayback_collector.collect(domain)
             metrics["raw_entries"] = len(raw_entries)
 
+            if not raw_entries:
+                response.status = ModuleStatus.SKIPPED
+                response.metrics = metrics
+                response.data = []
+                return response
+
             grouped = defaultdict(list)
 
             for entry in raw_entries:
@@ -89,6 +95,12 @@ class CrawlerWaybackService:
 
             metrics["unique_urls"] = len(grouped)
 
+            if not grouped:
+                response.status = ModuleStatus.SKIPPED
+                response.metrics = metrics
+                response.data = []
+                return response
+
             results = []
 
             for original in sorted(grouped.keys())[:self.limit]:
@@ -109,6 +121,11 @@ class CrawlerWaybackService:
                     })
 
             metrics["snapshots_generated"] = len(results)
+
+            if not results:
+                response.status = ModuleStatus.SKIPPED
+            else:
+                response.status = ModuleStatus.SUCCESS
 
             response.metrics = metrics
             response.data = results

@@ -47,7 +47,7 @@ class HttpHeadersService:
         )
 
         metrics = {
-            "domains_checked": 0,
+            "domains_attempted": 0,
             "domains_with_headers": 0,
             "headers_inserted": 0
         }
@@ -56,9 +56,21 @@ class HttpHeadersService:
             max_dns = int(context.cfg["limits"]["dns_max_domains"])
             domains = list(context.all_domains)[:max_dns]
 
+            if not domains:
+                response.status = ModuleStatus.SKIPPED
+                response.metrics = metrics
+
+                Logger.info(
+                    f"Skipping HTTP headers module execution_id={execution_id} target={target} "
+                    f"because there are no domains to process",
+                    context=self.__class__.__name__
+                )
+
+                return response
+
             # Process each discovered domain independently
             for domain in domains:
-                metrics["domains_checked"] += 1
+                metrics["domains_attempted"] += 1
 
                 try:
                     inserted = self._run_for_domain(context, domain)
@@ -88,6 +100,13 @@ class HttpHeadersService:
                         context=self.__class__.__name__
                     )
                     continue
+
+            if response.errors and metrics["domains_with_headers"] > 0:
+                response.status = ModuleStatus.PARTIAL
+            elif response.errors and metrics["domains_attempted"] > 0:
+                response.status = ModuleStatus.PARTIAL
+            else:
+                response.status = ModuleStatus.SUCCESS
 
             response.metrics = metrics
 
@@ -138,10 +157,13 @@ class HttpHeadersService:
 
         # Try each candidate URL until one returns headers
         for url in urls:
-            result = self.http_headers_collector.collect(url)
-            if result:
-                used_url = url
-                break
+            try:
+                result = self.http_headers_collector.collect(url)
+                if result:
+                    used_url = url
+                    break
+            except CollectorError:
+                continue
 
         # No valid headers found for this domain
         if not result:

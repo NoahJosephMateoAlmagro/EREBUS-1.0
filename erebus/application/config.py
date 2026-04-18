@@ -3,18 +3,20 @@ APP_CONFIG = {
         "nmap_path": r"C:\\Program Files (x86)\\Nmap\\nmap.exe"
     },
     "debug": {
-        "clear_db_on_run": True,
-        "show_debug_popups": False,
+        "clear_db_on_run": True
     },
-
+    "logging": {
+        "timezone": "Europe/Madrid",
+        "mode": "TRACE" #TRACE/INFO/ERROR/SILENT
+    },
     "modules": {
         "subdomains": True,
         "whois": True,
         "dns": True,
         "nmap": True,
         "http_headers": True,
-        "emails_passive": True,
-        "crawler": True,
+        "email_passive": True,
+        "crawling": True,
         "js_parsing": True,
         "file_parsing": True,
         "scraping": True,
@@ -36,15 +38,18 @@ APP_CONFIG = {
         # Wayback (CDX)
         "wayback_max_snapshots": 100,
         "wayback_min_year": 2000,
-        "cdx_url_limit":200,
+        "cdx_url_limit": 200,
 
         # JS
         "js_max_scripts": 50,
 
-        #Files
-          "file_max_size": 25 * 1024 * 1024,
-          "file_max_files": 120,
-          "file_max_workers": 5
+        # NMAP
+        "nmap_batch_size": 5,
+
+        # Files
+        "file_max_size": 25 * 1024 * 1024,
+        "file_max_files": 120,
+        "file_max_workers": 5
     },
 
     "timeouts": {
@@ -60,7 +65,6 @@ APP_CONFIG = {
         "nmap_scan": 120,
 
         # Crawler (requests)
-
         "crawler_live_page": 3,
         "crawler_wayback_page": 8,
         "http_robots": 5,

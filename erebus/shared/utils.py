@@ -9,7 +9,6 @@ def list_to_str(value: Any) -> str | None:
         return ", ".join(str(v) for v in value)
     return str(value)
 
-
 def is_external(url: str, base_domain: str) -> bool:
     """
     Determines whether a URL is external to the target domain.
@@ -29,7 +28,6 @@ def is_external(url: str, base_domain: str) -> bool:
         or netloc.endswith("." + base_domain)
     )
 
-
 def first_or_value(value: Any) -> Any:
     """
     Returns the first element if value is a list, otherwise returns value.
@@ -37,7 +35,6 @@ def first_or_value(value: Any) -> Any:
     if isinstance(value, list):
         return value[0] if value else None
     return value
-
 
 def ensure_list(value: Any) -> list[Any]:
     """
@@ -47,13 +44,11 @@ def ensure_list(value: Any) -> list[Any]:
         return []
     return value if isinstance(value, list) else [value]
 
-
 def normalize_URL(url: str) -> str:
     """
     Normalizes URLs by removing fragments and trailing slashes.
     """
     return url.split("#")[0].rstrip("/")
-
 
 def build_base_urls(domain: str) -> list[str]:
     """
@@ -93,7 +88,7 @@ def is_valid_html_url(url: str) -> bool:
 
     return True
 
-def is_valid_domain(value: str) -> str | None:
+def validate_and_normalize_domain(value: str) -> str | None:
 
     """
     Validates and normalizes a domain string.

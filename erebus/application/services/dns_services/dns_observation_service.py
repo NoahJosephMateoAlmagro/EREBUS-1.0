@@ -52,7 +52,8 @@ class DNSObservationService:
         )
 
         metrics = {
-            "domains_analyzed": 0,
+            "domains_checked": 0,
+            "domains_failed": 0,
             "cname_records": 0,
             "ns_records": 0,
             "observations_inserted": 0
@@ -66,22 +67,57 @@ class DNSObservationService:
             if base_domain not in domains_to_check:
                 domains_to_check.insert(0, base_domain)
 
+            if not domains_to_check:
+                response.status = ModuleStatus.SKIPPED
+                response.metrics = metrics
+
+                Logger.info(
+                    f"Skipping DNS observation module execution_id={execution_id} target={target} "
+                    f"because there are no domains to analyze",
+                    context=self.__class__.__name__
+                )
+
+                return response
+
             # Analyze every selected domain independently
             for domain in domains_to_check:
-                metrics["domains_analyzed"] += 1
-                self._analyze_domain(context, domain, metrics)
+                metrics["domains_checked"] += 1
+
+                try:
+                    self._analyze_domain(context, domain, metrics)
+
+                except CollectorError as e:
+                    metrics["domains_failed"] += 1
+                    response.errors.append(f"DNS observation failed for {domain}: {e}")
+
+                    Logger.error(
+                        f"DNS observation collector error execution_id={execution_id} "
+                        f"target={target} domain={domain}: {e}",
+                        context=self.__class__.__name__
+                    )
+                    continue
+
+                except Exception as e:
+                    metrics["domains_failed"] += 1
+                    response.errors.append(f"Unexpected DNS observation error for {domain}: {e}")
+
+                    Logger.error(
+                        f"Unexpected DNS observation domain error execution_id={execution_id} "
+                        f"target={target} domain={domain}: {e}",
+                        context=self.__class__.__name__
+                    )
+                    continue
+
+            if metrics["domains_checked"] == 0:
+                response.status = ModuleStatus.SKIPPED
+            elif metrics["domains_failed"] == 0:
+                response.status = ModuleStatus.SUCCESS
+            elif metrics["domains_failed"] < metrics["domains_checked"]:
+                response.status = ModuleStatus.PARTIAL
+            else:
+                response.status = ModuleStatus.FAILED
 
             response.metrics = metrics
-
-        except CollectorError as e:
-            response.status = ModuleStatus.FAILED
-            response.errors.append(str(e))
-
-            Logger.error(
-                f"DNS observation collector error execution_id={execution_id} "
-                f"target={target}: {e}",
-                context=self.__class__.__name__
-            )
 
         except Exception as e:
             response.status = ModuleStatus.FAILED

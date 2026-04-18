@@ -59,20 +59,27 @@ class FileParsingService:
         metrics = {
             "file_links_seen": 0,
             "files_attempted": 0,
-            "files_processed": 0,
+            "files_succeeded": 0,
             "files_failed": 0,
             "emails_matched_raw": 0,
-            "emails_normalized_ok": 0,
-            "emails_skipped_duplicate": 0,
+            "emails_normalized": 0,
+            "emails_duplicates_skipped": 0,
             "emails_inserted": 0,
             "credentials_matched_raw": 0,
-            "credentials_skipped_duplicate": 0,
+            "credentials_duplicates_skipped": 0,
             "credentials_inserted": 0,
         }
 
         if not context.crawl_results:
+            response.status = ModuleStatus.SKIPPED
             response.metrics = metrics
             response.finished_at = datetime.utcnow()
+
+            Logger.info(
+                f"Skipping file parsing module execution_id={execution_id} target={target} "
+                f"because there are no crawl results to process",
+                context=self.__class__.__name__
+            )
 
             Logger.info(
                 f"Finished file parsing module execution_id={execution_id} "
@@ -107,10 +114,22 @@ class FileParsingService:
 
             # -------- limits --------
 
-            max_files = context.cfg["limits"].get("file_max_files", 100)
-            max_workers = context.cfg["limits"].get("file_max_workers", 4)
+            max_files = int(context.cfg["limits"]["file_max_files"])
+            max_workers = int(context.cfg["limits"]["file_max_workers"])
 
             file_links = file_links[:max_files]
+
+            if not file_links:
+                response.status = ModuleStatus.SKIPPED
+                response.metrics = metrics
+
+                Logger.info(
+                    f"Skipping file parsing module execution_id={execution_id} target={target} "
+                    f"because there are no parsable file links",
+                    context=self.__class__.__name__
+                )
+
+                return response
 
             lock = threading.Lock()
 
@@ -132,7 +151,7 @@ class FileParsingService:
                     technique = result.get("technique", "file_parser")
 
                     with lock:
-                        metrics["files_processed"] += 1
+                        metrics["files_succeeded"] += 1
 
                     self._process_emails(context, text, url, technique, origin, metrics, lock)
                     self._process_credentials(context, text, url, technique, origin, metrics, lock)
@@ -165,6 +184,15 @@ class FileParsingService:
 
                 for future in futures:
                     future.result()
+
+            if metrics["files_attempted"] == 0:
+                response.status = ModuleStatus.SKIPPED
+            elif metrics["files_succeeded"] == 0:
+                response.status = ModuleStatus.FAILED
+            elif metrics["files_failed"] > 0:
+                response.status = ModuleStatus.PARTIAL
+            else:
+                response.status = ModuleStatus.SUCCESS
 
             response.metrics = metrics
 
@@ -212,12 +240,12 @@ class FileParsingService:
                 continue
 
             with lock:
-                metrics["emails_normalized_ok"] += 1
+                metrics["emails_normalized"] += 1
 
-            if not context.is_new_email(email):
-                with lock:
-                    metrics["emails_skipped_duplicate"] += 1
-                continue
+            with lock:
+                if not context.is_new_email(email):
+                    metrics["emails_duplicates_skipped"] += 1
+                    continue
 
             self.uow.emails.insert_email(
                 context.execution.ID,
@@ -250,10 +278,10 @@ class FileParsingService:
             with lock:
                 metrics["credentials_matched_raw"] += 1
 
-            if not context.is_new_credential(ctype, value):
-                with lock:
-                    metrics["credentials_skipped_duplicate"] += 1
-                continue
+            with lock:
+                if not context.is_new_credential(ctype, value):
+                    metrics["credentials_duplicates_skipped"] += 1
+                    continue
 
             self.uow.credentials.insert_credential(
                 context.execution.ID,

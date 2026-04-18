@@ -49,7 +49,7 @@ class DNSContextService:
         )
 
         metrics = {
-            "mx_records_found": 0,
+            "mx_hosts_found": 0,
             "txt_records_found": 0
         }
 
@@ -64,7 +64,7 @@ class DNSContextService:
                 if record.get("record")
             })
 
-            metrics["mx_records_found"] = len(mx_hosts)
+            metrics["mx_hosts_found"] = len(mx_hosts)
 
             # Collect TXT records
             txt_results = self.dns_txt_collector.collect(base_domain)

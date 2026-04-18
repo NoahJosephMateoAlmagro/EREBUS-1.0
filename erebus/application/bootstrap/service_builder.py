@@ -121,10 +121,9 @@ class ServiceBuilder:
 
         file_parser = FileParser(
             parsers=[TxtParser(), PdfParser(), XmlParser()],
-            timeout=cfg["timeouts"].get("file_download"),
-            max_size=int(cfg["limits"].get("file_max_size"))
+            timeout=cfg["timeouts"]["file_download"],
+            max_size=int(cfg["limits"]["file_max_size"])
         )
-
         cred_parser = CredentialParser()
 
         scraper = Scraper(
@@ -132,13 +131,14 @@ class ServiceBuilder:
         )
 
         nmap_collector = NmapCollector(
-            timeout=cfg["timeouts"].get("nmap_scan", 60),
-            nmap_path=cfg.get("tools", {}).get("nmap_path")
+            timeout=cfg["timeouts"]["nmap_scan"],
+            nmap_path=cfg["tools"]["nmap_path"]
         )
         nmap_parser = NmapParser()
 
-        shodan_collector = ShodanCollector(timeout=cfg["timeouts"].get("http_subdomains"))
-
+        shodan_collector = ShodanCollector(
+            timeout=cfg["timeouts"]["http_subdomains"]
+        )
         # ---------- Services ----------
 
         subdomain_service = SubdomainService(
@@ -213,7 +213,8 @@ class ServiceBuilder:
         nmap_service = NmapService(
             nmap_collector,
             nmap_parser,
-            uow
+            uow,
+            batch_size=int(cfg["limits"]["nmap_batch_size"])
         )
 
         shodan_service = ShodanService(
@@ -221,17 +222,16 @@ class ServiceBuilder:
             uow
         )
 
-
         return {
-            "subdomain": subdomain_service,
+            "subdomains": subdomain_service,
             "whois": whois_service,
-            "emails_passive": email_passive_service,
+            "email_passive": email_passive_service,
             "dns": dns_service,
             "nmap": nmap_service,
             "crawling": crawling_service,
             "crawler_processing": crawler_processing_service,
-            "js": js_parsing_service,
-            "file": file_parsing_service,
+            "js_parsing": js_parsing_service,
+            "file_parsing": file_parsing_service,
             "scraping": scraping_service,
             "shodan": shodan_service
         }

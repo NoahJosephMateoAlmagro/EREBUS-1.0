@@ -10,7 +10,7 @@ class NmapService:
     Service responsible for orchestrating batched Nmap scans and persisting parsed port results.
     """
 
-    def __init__(self, nmap_collector, nmap_parser, uow, batch_size: int = 5):
+    def __init__(self, nmap_collector, nmap_parser, uow, batch_size: int):
         """
         Args:
             nmap_collector: Collector responsible for executing Nmap scans
@@ -51,7 +51,7 @@ class NmapService:
             "targets_total": 0,
             "targets_scanned": 0,
             "ports_found": 0,
-            "ips_loaded_from_db": 0
+            "ips_loaded": 0
         }
 
         try:
@@ -61,7 +61,7 @@ class NmapService:
                 targets.append(target)
 
             ips = self.uow.domains.get_resolved_ips(execution_id) or []
-            metrics["ips_loaded_from_db"] = len(ips)
+            metrics["ips_loaded"] = len(ips)
 
             targets.extend(ips)
 
@@ -69,7 +69,15 @@ class NmapService:
             metrics["targets_total"] = len(deduplicated_targets)
 
             if not deduplicated_targets:
+                response.status = ModuleStatus.SKIPPED
                 response.metrics = metrics
+
+                Logger.info(
+                    f"Skipping Nmap module execution_id={execution_id} target={target} "
+                    f"because there are no targets to scan",
+                    context=self.__class__.__name__
+                )
+
                 return response
 
             for i in range(0, len(deduplicated_targets), self.batch_size):
@@ -127,6 +135,13 @@ class NmapService:
                     )
 
                     continue
+
+            if metrics["targets_scanned"] == 0:
+                response.status = ModuleStatus.FAILED
+            elif metrics["targets_scanned"] < metrics["targets_total"]:
+                response.status = ModuleStatus.PARTIAL
+            else:
+                response.status = ModuleStatus.SUCCESS
 
             response.metrics = metrics
 

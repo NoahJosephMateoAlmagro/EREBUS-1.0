@@ -60,7 +60,7 @@ class SubdomainService:
             metrics["subdomains_found"] = len(subdomains)
 
             for s in subdomains:
-                domain = Utils.is_valid_domain(s.get("value"))
+                domain = Utils.validate_and_normalize_domain(s.get("value"))
 
                 if domain:
                     context.all_domains.add(domain)
