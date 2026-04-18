@@ -1,31 +1,5 @@
 from typing import Any
-
-
-CNAME_PROVIDER_PATTERNS = {
-    "cloudfront.net": "AWS",
-    "amazonaws.com": "AWS",
-    "azurewebsites.net": "Azure",
-    "trafficmanager.net": "Azure",
-    "cloudapp.azure.com": "Azure",
-    "herokudns.com": "Heroku",
-    "github.io": "GitHub Pages",
-    "pages.dev": "Cloudflare Pages",
-    "cdn.cloudflare.net": "Cloudflare",
-    "fastly.net": "Fastly",
-    "netlify.app": "Netlify",
-    "vercel.app": "Vercel",
-}
-
-NS_PROVIDER_PATTERNS = {
-    "cloudflare.com": "Cloudflare",
-    "googledomains.com": "Google",
-    "domaincontrol.com": "GoDaddy",
-    "awsdns-": "AWS Route 53",
-    "azure-dns.": "Azure DNS",
-    "registrar-servers.com": "Namecheap",
-    "ovh.net": "OVH",
-}
-
+import shared.constants as C
 
 class DNSDetailsAnalyzer:
     """
@@ -91,9 +65,9 @@ class DNSDetailsAnalyzer:
         rt = (record_type or "").upper()
 
         patterns = (
-            CNAME_PROVIDER_PATTERNS
+            C.CNAME_PROVIDER_PATTERNS
             if rt == "CNAME"
-            else NS_PROVIDER_PATTERNS
+            else C.NS_PROVIDER_PATTERNS
         )
 
         for pattern, provider in patterns.items():

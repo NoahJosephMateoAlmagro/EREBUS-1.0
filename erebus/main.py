@@ -4,7 +4,7 @@ from persistence.database import Database
 from persistence.uow import UnitOfWork
 from application.config import APP_CONFIG
 from shared.logger import Logger
-from shared.domain_validator import is_valid_domain
+from shared.domain_validator import valid_domain
 
 
 def main():

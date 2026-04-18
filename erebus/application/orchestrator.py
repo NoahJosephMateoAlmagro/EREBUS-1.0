@@ -6,7 +6,7 @@ from application.bootstrap.service_builder import ServiceBuilder
 from application.objects.execution_context import ExecutionContext
 from application.objects.responses.ExecutionResponse import ExecutionResponse
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
-from shared.domain_validator import is_valid_domain
+from shared.domain_validator import valid_domain
 from shared.logger import Logger
 
 
@@ -54,7 +54,7 @@ class Orchestrator:
 
         Logger.info("Starting execution", context="Orchestrator")
 
-        builder = ServiceBuilder(self.uow, cfg, is_valid_domain)
+        builder = ServiceBuilder(self.uow, cfg, valid_domain)
         services = builder.build()
 
         context = ExecutionContext(execution, cfg)

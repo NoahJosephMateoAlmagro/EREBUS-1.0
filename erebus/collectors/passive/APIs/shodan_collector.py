@@ -64,7 +64,8 @@ class ShodanCollector(Collector):
             r = requests.get(
                 dns_url,
                 params={"key": self.api_key},
-                timeout=self.timeout
+                timeout=self.timeout,
+                headers={"User-Agent": C.USER_AGENT}
             )
 
             if r.status_code == 200:
@@ -86,8 +87,9 @@ class ShodanCollector(Collector):
                 search_url,
                 params={
                     "key": self.api_key,
-                    "query": f"hostname:{domain}"
+                    "query": f"hostname:{domain}",
                 },
+                headers={"User-Agent": C.USER_AGENT},
                 timeout=self.timeout
             )
 
@@ -148,7 +150,8 @@ class ShodanCollector(Collector):
             r = requests.get(
                 url,
                 params={"key": self.api_key},
-                timeout=self.timeout
+                timeout=self.timeout,
+                headers={"User-Agent": C.USER_AGENT}
             )
 
             if r.status_code != 200:
@@ -177,5 +180,6 @@ class ShodanCollector(Collector):
             }
 
         except requests.RequestException as e:
-            Logger.error(f"Shodan host request error: {e}", context=self.__class__.__name__)
-            return None
+
+            Logger.error(f"Shodan request error: {e}", context=self.__class__.__name__)
+            raise CollectorError(f"Shodan collector error: {e}") from e

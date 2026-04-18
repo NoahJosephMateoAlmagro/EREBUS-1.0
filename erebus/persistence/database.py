@@ -3,6 +3,7 @@ import sqlite3
 
 from persistence.schema import SCHEMA_SQL
 from shared.logger import Logger
+from exceptions.exceptions import DatabaseError
 
 
 class Database:
@@ -20,8 +21,16 @@ class Database:
         db_dir.mkdir(exist_ok=True)
 
         self.db_path = db_dir / "erebus.db"
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self.conn.execute("PRAGMA foreign_keys = ON;")
+
+        try:
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn.execute("PRAGMA foreign_keys = ON;")
+        except Exception as e:
+            Logger.error(
+                f"Database connection error: {e}",
+                context=self.__class__.__name__
+            )
+            raise DatabaseError(f"Failed to connect to database: {self.db_path}") from e
 
         Logger.info(
             f"Using database at: {self.db_path.resolve()}",
@@ -48,7 +57,7 @@ class Database:
                 f"Database initialization error: {e}",
                 context=self.__class__.__name__
             )
-            raise
+            raise DatabaseError("Failed to initialize database schema") from e
 
     # -------------------------------------------------
     # Cleanup (testing purposes)
@@ -76,7 +85,7 @@ class Database:
                 f"Database cleanup error: {e}",
                 context=self.__class__.__name__
             )
-            raise
+            raise DatabaseError("Failed to clear database") from e
 
     # -------------------------------------------------
     # Connection management
@@ -87,4 +96,11 @@ class Database:
         Closes database connection.
         """
         if self.conn:
-            self.conn.close()
+            try:
+                self.conn.close()
+            except Exception as e:
+                Logger.error(
+                    f"Database close error: {e}",
+                    context=self.__class__.__name__
+                )
+                raise DatabaseError("Failed to close database connection") from e

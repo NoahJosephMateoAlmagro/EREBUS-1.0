@@ -20,7 +20,7 @@ class NmapCollector(Collector):
         self.timeout = timeout
         self.nmap_path = nmap_path
 
-    def _resolve_nmap(self):
+    def _resolve_nmap(self) -> str|None:
         """
         Resolves Nmap binary path from config, PATH or common locations.
         """
@@ -43,7 +43,7 @@ class NmapCollector(Collector):
 
         return None
 
-    def collect(self, targets):
+    def collect(self, targets: str | list[str]) -> str :
         """
         Executes Nmap scan for one or multiple targets.
 
@@ -100,6 +100,9 @@ class NmapCollector(Collector):
             Logger.error("Nmap execution timeout", context=self.__class__.__name__)
             raise CollectorError(f"Nmap timeout for targets: {targets}")
 
+        except CollectorError: #Inner try errors
+            raise
+
         except Exception as e:
             Logger.error(f"Nmap error: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"Nmap error: {e}")
+            raise CollectorError(f"Nmap error: {e}") from e

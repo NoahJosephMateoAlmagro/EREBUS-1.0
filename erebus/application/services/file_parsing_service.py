@@ -6,7 +6,7 @@ import threading
 
 import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
-from exceptions.exceptions import CollectorError
+from exceptions.exceptions import ParserError
 from shared.logger import Logger
 
 
@@ -29,7 +29,7 @@ class FileParsingService:
         self.email_analyzer = email_analyzer
         self.uow = uow
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
         """
         Executes file parsing workflow over file links discovered during crawling.
 
@@ -137,12 +137,12 @@ class FileParsingService:
                     self._process_emails(context, text, url, technique, origin, metrics, lock)
                     self._process_credentials(context, text, url, technique, origin, metrics, lock)
 
-                except CollectorError as e:
+                except ParserError as e:
                     with lock:
                         metrics["files_failed"] += 1
 
                     Logger.error(
-                        f"File parser collector error execution_id={execution_id} "
+                        f"File parser error execution_id={execution_id} "
                         f"target={target} url={url}: {e}",
                         context=self.__class__.__name__
                     )

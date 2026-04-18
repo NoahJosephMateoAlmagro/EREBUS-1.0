@@ -4,6 +4,7 @@ from requests.exceptions import RequestException
 
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
+import shared.constants as C
 
 class EmailCollector(Collector):
     """
@@ -18,7 +19,7 @@ class EmailCollector(Collector):
         """
         self.timeout = timeout
 
-    def collect(self, target: str):
+    def collect(self, target: str) -> list[dict]:
         """
         Fetches HTML pages from multiple domain variants.
 
@@ -49,7 +50,7 @@ class EmailCollector(Collector):
                 response = requests.get(
                     url,
                     timeout=self.timeout,
-                    headers={"User-Agent": "EREBUS/1.0"}
+                    headers={"User-Agent": C.USER_AGENT}
                 )
 
                 # Skip non-success responses

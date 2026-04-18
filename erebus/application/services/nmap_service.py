@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
-from exceptions.exceptions import CollectorError
+from exceptions.exceptions import ParserError, CollectorError
 from shared.logger import Logger
 
 
@@ -23,7 +23,7 @@ class NmapService:
         self.uow = uow
         self.batch_size = batch_size
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
         """
         Executes batched Nmap scanning workflow.
 
@@ -106,6 +106,17 @@ class NmapService:
 
                     continue
 
+                except ParserError as e:
+                    response.errors.append(str(e))
+
+                    Logger.error(
+                        f"Nmap batch parser error execution_id={execution_id} "
+                        f"target={target} batch={batch}: {e}",
+                        context=self.__class__.__name__
+                    )
+
+                    continue
+
                 except Exception as e:
                     response.errors.append(f"Unexpected batch error: {e}")
 
@@ -118,15 +129,6 @@ class NmapService:
                     continue
 
             response.metrics = metrics
-
-        except CollectorError as e:
-            response.status = ModuleStatus.FAILED
-            response.errors.append(str(e))
-
-            Logger.error(
-                f"Nmap collector error execution_id={execution_id} target={target}: {e}",
-                context=self.__class__.__name__
-            )
 
         except Exception as e:
             response.status = ModuleStatus.FAILED

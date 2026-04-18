@@ -5,6 +5,8 @@ from collections import defaultdict
 from collectors.base import Collector
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
+import shared.constants as C
+
 """
 [BORRAR DESPUES]
 
@@ -144,7 +146,7 @@ class WaybackCollector(Collector):
         self.cdx_limit = cdx_limit
 
 
-    def collect(self, domain: str):
+    def collect(self, domain: str) -> list[dict]:
 
         """
         Queries Wayback CDX API and returns raw snapshot data.
@@ -176,7 +178,7 @@ class WaybackCollector(Collector):
                     self.CDX_URL,
                     params=params,
                     timeout=self.timeout,
-                    headers={"User-Agent": "EREBUS/1.0"}
+                    headers={"User-Agent": C.USER_AGENT}
                 )
             except requests.RequestException:
                 # Wayback not reachable. Fail silently (non-critical error)

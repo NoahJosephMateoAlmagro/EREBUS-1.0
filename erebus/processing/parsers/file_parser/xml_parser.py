@@ -3,6 +3,7 @@ from xml.etree import ElementTree as ET
 import shared.constants as C
 from shared.logger import Logger
 from .base import BaseFileParser
+from exceptions.exceptions import ParserError
 
 
 class XmlParser(BaseFileParser):
@@ -36,8 +37,9 @@ class XmlParser(BaseFileParser):
             return "\n".join(texts)
 
         except Exception as e:
+
             Logger.error(
-                f"XML parsing error: {e}",
+                f"TXT parsing error: {e}",
                 context=self.__class__.__name__
             )
-            return ""
+            raise ParserError("Failed to parse TXT content") from e

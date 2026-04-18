@@ -5,8 +5,8 @@ from urllib.parse import urljoin, urlparse
 
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
-
-
+import shared.constants as C
+import shared.utils as Utils
 class Crawler:
     """
     Crawler that navigates internal links starting from one or multiple URLs.
@@ -41,34 +41,18 @@ class Crawler:
 
         self.domain = urlparse(first).netloc if first else ""
 
-    def _normalize(self, url: str) -> str:
-        """
-        Normalizes URLs by removing fragments and trailing slashes.
-        """
-        return url.split("#")[0].rstrip("/")
-
     def _is_internal(self, url: str) -> bool:
         """
         Checks whether a URL belongs to the allowed domain scope.
         """
-        parsed = urlparse(url)
-        netloc = parsed.netloc.lower()
+        base_domain = self.allowed_domain or self.domain
 
-        if not netloc:
+        if not base_domain:
             return False
 
-        if ":" in netloc:
-            netloc = netloc.split(":")[0]
+        return not Utils.is_external(url, base_domain)
 
-        if self.allowed_domain:
-            return (
-                netloc == self.allowed_domain
-                or netloc.endswith("." + self.allowed_domain)
-            )
-
-        return netloc == self.domain
-
-    def collect(self):
+    def collect(self) -> list[dict]:
         """
         Executes crawling process.
 
@@ -83,7 +67,7 @@ class Crawler:
         try:
             while self.queue and len(self.visited) < self.max_pages:
 
-                url = self._normalize(self.queue.pop(0))
+                url = Utils.normalize_URL(self.queue.pop(0))
 
                 if url in self.visited:
                     continue
@@ -94,7 +78,7 @@ class Crawler:
                     response = requests.get(
                         url,
                         timeout=self.timeout,
-                        headers={"User-Agent": "EREBUS/1.0"}
+                        headers={"User-Agent": C.USER_AGENT}
                     )
                 except requests.RequestException:
                     # HTTP failure (skip URL)
@@ -118,7 +102,7 @@ class Crawler:
                     if "@" in href:
                         continue
 
-                    full_url = self._normalize(urljoin(url, href))
+                    full_url = Utils.normalize_URL(urljoin(url, href))
 
                     if self._is_internal(full_url):
                         links.add(full_url)
@@ -128,7 +112,7 @@ class Crawler:
 
                 scripts = set()
                 for s in soup.find_all("script", src=True):
-                    full = self._normalize(urljoin(url, s["src"]))
+                    full = Utils.normalize_URL(urljoin(url, s["src"]))
                     if self._is_internal(full):
                         scripts.add(full)
 
@@ -139,9 +123,11 @@ class Crawler:
                     "scripts": list(scripts)
                 })
 
+
         except Exception as e:
+
             Logger.error(f"Crawler internal error: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"Crawler internal error: {e}")
+            raise CollectorError(f"Crawler internal error: {e}") from e
 
         Logger.info(f"Crawled {len(results)} pages", context=self.__class__.__name__)
 

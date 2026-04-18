@@ -1,6 +1,8 @@
 import requests
 
 from shared.logger import Logger
+import shared.constants as C
+from exceptions.exceptions import ParserError
 
 
 class FileParser:
@@ -38,7 +40,20 @@ class FileParser:
         if content is None:
             return None
 
-        text = parser.extract_text(content)
+        try:
+            text = parser.extract_text(content)
+        except ParserError as e:
+            Logger.error(
+                f"File parser error url={url}: {e}",
+                context=self.__class__.__name__
+            )
+            raise
+        except Exception as e:
+            Logger.error(
+                f"Unexpected file parser error url={url}: {e}",
+                context=self.__class__.__name__
+            )
+            raise ParserError(f"Failed to parse file content from {url}") from e
 
         if not text:
             return None
@@ -75,7 +90,7 @@ class FileParser:
             bytes | None: File content or None if failed
         """
         headers = {
-            "User-Agent": "EREBUS/1.0"
+            "User-Agent": C.USER_AGENT
         }
 
         try:
@@ -119,4 +134,4 @@ class FileParser:
                 f"File download error url={url}: {e}",
                 context=self.__class__.__name__
             )
-            return None
+            raise ParserError(f"Failed to download file: {url}") from e

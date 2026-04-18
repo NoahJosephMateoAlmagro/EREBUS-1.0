@@ -7,6 +7,7 @@ from shared.logger import Logger
 from .base import BaseFileParser
 
 import logging
+from exceptions.exceptions import ParserError
 
 # Suppress noisy pdfminer logs
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
@@ -35,9 +36,11 @@ class PdfParser(BaseFileParser):
             text = extract_text(BytesIO(content))
             return text or ""
 
+
         except Exception as e:
+
             Logger.error(
-                f"PDF parsing error: {e}",
+                f"TXT parsing error: {e}",
                 context=self.__class__.__name__
             )
-            return ""
+            raise ParserError("Failed to parse TXT content") from e

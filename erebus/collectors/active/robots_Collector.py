@@ -3,7 +3,7 @@ import requests
 
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
-
+import shared.constants as C
 
 class RobotsCollector(Collector):
     """
@@ -17,7 +17,7 @@ class RobotsCollector(Collector):
         """
         self.timeout = timeout
 
-    def collect(self, domain: str):
+    def collect(self, domain: str) -> dict:
         """
         Fetches and parses robots.txt.
 
@@ -49,7 +49,7 @@ class RobotsCollector(Collector):
                     r = requests.get(
                         url,
                         timeout=self.timeout,
-                        headers={"User-Agent": "EREBUS/1.0"}
+                        headers={"User-Agent": C.USER_AGENT}
                     )
 
                     if r.status_code == 200 and r.text:
@@ -105,7 +105,7 @@ class RobotsCollector(Collector):
 
         except Exception as e:
             Logger.error(f"Robots parsing error: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"Robots parsing error for {domain}: {e}")
+            raise CollectorError(f"Robots parsing error for {domain}: {e}") from e
 
         Logger.info(
             f"Robots parsed (paths: {len(results['paths'])}, sitemaps: {len(results['sitemaps'])})",

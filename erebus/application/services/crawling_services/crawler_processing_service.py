@@ -104,7 +104,7 @@ class CrawlerProcessingService:
         for raw in extracted_emails:
             metrics["emails_matched_raw"] += 1
 
-            email = self.email_analyzer.normalize(raw)
+            email = self.email_analyzer.normalize_URL(raw)
             if not email:
                 continue
 

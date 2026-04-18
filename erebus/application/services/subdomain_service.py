@@ -20,9 +20,9 @@ class SubdomainService:
         """
         self.subdomain_collector = subdomain_collector
         self.uow = uow
-        self._is_valid_domain = domain_validator
+        self._valid_domain = domain_validator
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
         """
         Executes subdomain collection workflow.
 
@@ -61,7 +61,7 @@ class SubdomainService:
             metrics["subdomains_found"] = len(subdomains)
 
             for s in subdomains:
-                domain = self._is_valid_domain(s.get("value"))
+                domain = self._valid_domain(s.get("value"))
 
                 if domain:
                     context.all_domains.add(domain)

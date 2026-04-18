@@ -1,4 +1,4 @@
-def is_valid_domain(value: str) -> str | None:
+def valid_domain(value: str) -> str | None:
 
     """
     Validates and normalizes a domain string.

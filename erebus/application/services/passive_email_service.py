@@ -10,7 +10,7 @@ class EmailPassiveService:
         self.email_analyzer = email_analyzer
         self.uow = uow
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
 
         response = ModuleResponse(
             module_name="email_passive",

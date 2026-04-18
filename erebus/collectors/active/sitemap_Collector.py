@@ -2,9 +2,9 @@ from collectors.base import Collector
 import requests
 import xml.etree.ElementTree as ET
 
-from exceptions.exceptions import CollectorError
+from exceptions.exceptions import CollectorError, ParserError
 from shared.logger import Logger
-
+import shared.constants as C
 
 class SitemapCollector(Collector):
 
@@ -22,7 +22,7 @@ class SitemapCollector(Collector):
         self.timeout = timeout
         self.max_urls = max_urls
 
-    def collect(self, sitemap_url: str):
+    def collect(self, sitemap_url: str)-> list[str]:
         """
         Fetches and parses a sitemap XML file.
 
@@ -43,7 +43,7 @@ class SitemapCollector(Collector):
                 r = requests.get(
                     sitemap_url,
                     timeout=self.timeout,
-                    headers={"User-Agent": "EREBUS/1.0"}
+                    headers={"User-Agent": C.USER_AGENT}
                 )
             except requests.RequestException:
                 # HTTP request failed (not a structural error)
@@ -61,7 +61,7 @@ class SitemapCollector(Collector):
 
             except ET.ParseError as e:
                 Logger.error("Sitemap XML parsing failed", context=self.__class__.__name__)
-                raise CollectorError(f"Sitemap XML parse error for {sitemap_url}: {e}")
+                raise ParserError(f"Sitemap XML parse error for {sitemap_url}: {e}") from e
 
             # Extract <loc> elements
             for loc in root.findall(".//{*}loc"):
@@ -78,7 +78,7 @@ class SitemapCollector(Collector):
 
         except Exception as e:
             Logger.error(f"Sitemap collector error: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"Sitemap collector error for {sitemap_url}: {e}")
+            raise CollectorError(f"Sitemap collector error for {sitemap_url}: {e}") from e
 
         Logger.info(f"Collected {len(urls)} sitemap URLs", context=self.__class__.__name__)
         return urls

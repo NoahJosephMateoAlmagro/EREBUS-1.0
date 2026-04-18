@@ -23,7 +23,7 @@ class SubdomainCollector(Collector):
         self.timeout = timeout
         self.limit = limit
 
-    def collect(self, target: str):
+    def collect(self, target: str) -> list[dict]:
 
         """
         Queries crt.sh and extracts subdomains related to the target domain.
@@ -39,7 +39,7 @@ class SubdomainCollector(Collector):
         results = []
 
         url = f"https://crt.sh/?q=%25.{target}&output=json"
-        headers = {"User-Agent": "EREBUS/1.0"}
+        headers = {"User-Agent": C.USER_AGENT}
 
         Logger.debug(f"Requesting crt.sh URL: {url}", context=self.__class__.__name__)
 
@@ -48,8 +48,9 @@ class SubdomainCollector(Collector):
             response = requests.get(url, headers=headers, timeout=self.timeout)
 
         except RequestException as e:
+
             Logger.error(f"HTTP request failed: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"HTTP error querying crt.sh: {e}")
+            raise CollectorError(f"HTTP error querying crt.sh: {e}") from e
 
         # Validate response status
         if response.status_code != 200:
@@ -61,8 +62,9 @@ class SubdomainCollector(Collector):
             data = response.json()
 
         except ValueError as e:
-            Logger.error("JSON parsing failed", context=self.__class__.__name__)
-            raise CollectorError(f"Error parsing crt.sh JSON: {e}")
+
+          Logger.error("JSON parsing failed", context=self.__class__.__name__)
+          raise CollectorError(f"Error parsing crt.sh JSON: {e}") from e
 
         subdomains = set()
 

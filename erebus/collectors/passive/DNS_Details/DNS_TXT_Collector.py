@@ -18,9 +18,9 @@ class DNS_TXT_Collector(Collector):
         self.resolver = dns.resolver.Resolver(configure=False)
         self.resolver.lifetime = timeout
         self.resolver.timeout = timeout
-        self.resolver.nameservers = ["8.8.8.8", "1.1.1.1"]
+        self.resolver.nameservers = C.RESOLVER_NAMESERVERS
 
-    def collect(self, domain: str):
+    def collect(self, domain: str) -> list[dict]:
 
         """
         Resolves TXT records for the given domain.
@@ -68,7 +68,7 @@ class DNS_TXT_Collector(Collector):
 
         except Exception as e:
             Logger.error(f"TXT resolution error: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"TXT resolution error for {domain}: {e}")
+            raise CollectorError(f"TXT resolution error for {domain}: {e}") from e
 
         Logger.info(f"Resolved {len(results)} TXT records", context=self.__class__.__name__)
         return results

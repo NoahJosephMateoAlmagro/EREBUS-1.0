@@ -5,8 +5,9 @@ from urllib.parse import urlparse
 
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
+import shared.constants as C
 
-class HttpHeadersCollector(Collector):
+class HTTPHeadersCollector(Collector):
     """
     Collector that retrieves HTTP response headers for a given URL.
 
@@ -54,7 +55,7 @@ class HttpHeadersCollector(Collector):
                     url,
                     allow_redirects=True,
                     timeout=self.timeout,
-                    headers={"User-Agent": "EREBUS/1.0"}
+                    headers={"User-Agent": C.USER_AGENT}
                 )
             except requests.RequestException:
                 # HTTP request failed (not a structural error)
@@ -68,7 +69,7 @@ class HttpHeadersCollector(Collector):
 
         except Exception as e:
             Logger.error(f"HTTP headers collection error: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"HTTP headers collection error for {url}: {e}")
+            raise CollectorError(f"HTTP headers collection error for {url}: {e}") from e
 
         Logger.info(f"Collected {len(headers_result)} headers", context=self.__class__.__name__)
         return headers_result

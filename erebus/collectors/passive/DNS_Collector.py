@@ -23,9 +23,9 @@ class DNSCollector(Collector):
         self.resolver = dns.resolver.Resolver(configure=False)
         self.resolver.lifetime = timeout
         self.resolver.timeout = timeout
-        self.resolver.nameservers = ["8.8.8.8", "1.1.1.1"]
+        self.resolver.nameservers = C.RESOLVER_NAMESERVERS
 
-    def collect(self, target: str):
+    def collect(self, target: str)-> list[dict]:
 
         """
        Resolves A and AAAA records for the target domain.
@@ -50,10 +50,10 @@ class DNSCollector(Collector):
             try:
                 answers = self.resolver.resolve(target, record_type)
 
-                for dato in sorted(answers, key=lambda r: r.to_text()):
+                for data in sorted(answers, key=lambda r: r.to_text()):
                     results.append({
                         "domain": target,
-                        "ip": dato.to_text(),
+                        "ip": data.to_text(),
                         "record_type": record_type,
                         "source": C.TECHNIQUE_DNS
                     })
@@ -75,8 +75,9 @@ class DNSCollector(Collector):
                 continue
 
             except Exception as e:
+
                 Logger.error(f"Unexpected DNS error: {e}", context=self.__class__.__name__)
-                raise CollectorError(f"Unexpected DNS resolution error: {e}")
+                raise CollectorError(f"Unexpected DNS resolution error: {e}") from e
 
         # If all attempts failed due to timeouts, we treat it as technical failure
         if network_failures == attempted and attempted > 0:

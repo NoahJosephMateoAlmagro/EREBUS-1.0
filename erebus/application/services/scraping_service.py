@@ -136,7 +136,7 @@ class ScrapingService:
 
         return response
 
-    def _process(self, context, page, result, metrics):
+    def _process(self, context, page, result, metrics) -> None:
         """
         Processes a scraped page result and extracts emails and credentials
         from HTML and JSON content.

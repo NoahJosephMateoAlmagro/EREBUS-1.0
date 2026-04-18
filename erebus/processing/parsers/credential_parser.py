@@ -1,32 +1,11 @@
-import re
 from typing import Any, List, Tuple
-
-
-USER_REGEX = re.compile(
-    r"\b(user(name)?|login)[\w\-]*\s*=\s*['\"]([^'\"\s]{3,})['\"]",
-    re.IGNORECASE
-)
-
-PASS_REGEX = re.compile(
-    r"\b(pass(word)?|pwd)[\w\-]*\s*=\s*['\"]([^'\"\s]{3,})['\"]",
-    re.IGNORECASE
-)
-
-TOKEN_REGEX = re.compile(
-    r"\b(api[_-]?key|token|secret)[\w\-]*\s*=\s*['\"]([^'\"\s]{8,})['\"]",
-    re.IGNORECASE
-)
-
+import shared.constants as C
 
 class CredentialParser:
     """
     Parser responsible for extracting credentials from raw text and JSON structures.
     Supports detection of users, passwords and tokens.
     """
-
-    JSON_USER_KEYS = {"user", "username", "login"}
-    JSON_PASS_KEYS = {"password", "pwd", "pass"}
-    JSON_TOKEN_KEYS = {"apikey", "api_key", "token", "secret"}
 
     def parse(self, text: str, source: str) -> List[Tuple[str, str, str]]:
         """
@@ -45,13 +24,13 @@ class CredentialParser:
         if not text:
             return results
 
-        for _, _, value in USER_REGEX.findall(text):
+        for _, _, value in C.USER_REGEX.findall(text):
             self._add_result(results, seen, ("user", value, source))
 
-        for _, _, value in PASS_REGEX.findall(text):
+        for _, _, value in C.PASS_REGEX.findall(text):
             self._add_result(results, seen, ("password", value, source))
 
-        for _, value in TOKEN_REGEX.findall(text):
+        for _, value in C.TOKEN_REGEX.findall(text):
             self._add_result(results, seen, ("token", value, source))
 
         return results
@@ -100,15 +79,17 @@ class CredentialParser:
         Returns:
             str | None: Credential type or None
         """
-        if key in self.JSON_USER_KEYS:
+        if key in C.JSON_USER_KEYS:
             return "user"
-        if key in self.JSON_PASS_KEYS:
+        if key in C.JSON_PASS_KEYS:
             return "password"
-        if key in self.JSON_TOKEN_KEYS:
+        if key in C.JSON_TOKEN_KEYS:
             return "token"
         return None
 
-    def _add_result(self, results, seen, item):
+    def _add_result(self, results: List[Tuple[str, str, str]],
+    seen: set[Tuple[str, str, str]], item: Tuple[str, str, str]) -> None:
+
         """
         Adds a credential result if not already seen.
 
@@ -120,3 +101,5 @@ class CredentialParser:
         if item not in seen:
             results.append(item)
             seen.add(item)
+
+

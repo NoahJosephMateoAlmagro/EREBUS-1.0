@@ -4,7 +4,8 @@ from playwright.sync_api import sync_playwright, TimeoutError
 
 from exceptions.exceptions import CollectorError
 from shared.logger import Logger
-
+import shared.constants as C
+import shared.utils as Utils
 
 class Scraper:
     """
@@ -19,7 +20,7 @@ class Scraper:
         self.timeout = timeout
 
     @staticmethod
-    def _block_resources(route, request):
+    def _block_resources(route, request) -> None:
         """
         Blocks non-essential resources to improve performance.
         """
@@ -28,7 +29,7 @@ class Scraper:
         else:
             route.continue_()
 
-    def collect(self, url: str):
+    def collect(self, url: str) -> dict:
         """
         Executes the scraping process for a given URL.
 
@@ -50,7 +51,7 @@ class Scraper:
             "json_objects": []
         }
 
-        def handle_response(response):
+        def handle_response(response) -> None:
             """
             Intercepts network responses and extracts JSON data
             from same-domain requests.
@@ -60,10 +61,9 @@ class Scraper:
 
                 if "json" in ct or response.url.lower().endswith(".json"):
 
-                    resp_domain = urlparse(response.url).netloc
                     page_domain = urlparse(url).netloc
 
-                    if resp_domain == page_domain or resp_domain.endswith("." + page_domain):
+                    if not Utils.is_external(response.url, page_domain):
                         text = response.text()
                         result["json_texts"].append(text)
 
@@ -82,7 +82,7 @@ class Scraper:
                 browser = p.chromium.launch(headless=True)
 
                 context = browser.new_context(
-                    user_agent="EREBUS/1.0",
+                    user_agent=C.USER_AGENT,
                     java_script_enabled=True
                 )
 
@@ -121,7 +121,7 @@ class Scraper:
 
         except Exception as e:
             Logger.error(f"Scraper internal error: {e}", context=self.__class__.__name__)
-            raise CollectorError(f"Scraper internal error for {url}: {e}")
+            raise CollectorError(f"Scraper internal error for {url}: {e}") from e
 
         Logger.info(
             f"Scraping completed (HTML: {'yes' if result['html'] else 'no'}, JSON: {len(result['json_objects'])})",

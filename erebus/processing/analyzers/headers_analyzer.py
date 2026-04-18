@@ -1,43 +1,11 @@
+import shared.constants as C
+
 class HeadersAnalyzer:
     """
     Analyzer responsible for evaluating HTTP headers for:
     - security posture (missing or present headers)
     - technology exposure (stack fingerprinting)
     """
-
-    SECURITY_HEADERS = {
-        "strict-transport-security": "Forces HTTPS",
-        "content-security-policy": "Mitigates XSS",
-        "x-frame-options": "Clickjacking protection",
-        "x-content-type-options": "MIME sniffing protection",
-        "referrer-policy": "Controls referrer leakage",
-        "permissions-policy": "Controls browser features"
-    }
-
-    TECH_HEADERS = {
-        # Core stack
-        "server": "Web server",
-        "x-powered-by": "Backend technology",
-        "x-generator": "CMS / Generator",
-
-        # Infra / proxy
-        "via": "Proxy / Gateway",
-        "x-forwarded-for": "Reverse proxy",
-        "x-forwarded-proto": "TLS offloading",
-
-        # Sessions / load balancing
-        "set-cookie": "Session technology",
-
-        # Cloud / CDN
-        "cf-ray": "Cloudflare identifier",
-        "cf-cache-status": "Cloudflare cache",
-        "x-amz-cf-id": "AWS CloudFront",
-        "x-cache": "Reverse proxy cache",
-
-        # Microsoft stack
-        "x-aspnet-version": "ASP.NET version",
-        "x-aspnetmvc-version": "ASP.NET MVC version",
-    }
 
     @classmethod
     def analyze_security(cls, headers: dict[str, str]) -> list[dict]:
@@ -52,7 +20,7 @@ class HeadersAnalyzer:
         """
         results = []
 
-        for header, description in cls.SECURITY_HEADERS.items():
+        for header, description in C.SECURITY_HEADERS.items():
             value = headers.get(header)
 
             if value:
@@ -85,7 +53,7 @@ class HeadersAnalyzer:
         """
         results = []
 
-        for header, description in cls.TECH_HEADERS.items():
+        for header, description in C.TECH_HEADERS.items():
             value = headers.get(header)
             if not value:
                 continue

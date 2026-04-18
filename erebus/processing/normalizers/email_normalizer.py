@@ -1,38 +1,13 @@
 import re
 import base64
 import html
-
+import shared.constants as C
 
 class EmailAnalyzer:
     """
     Analyzer responsible for extracting and normalizing email addresses
     from raw text using multiple detection techniques.
     """
-
-    EMAIL_REGEX = re.compile(
-        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-    )
-
-    OBFUSCATED_PATTERNS = [
-        (r"\s*\[\s*at\s*\]\s*", "@"),
-        (r"\s*\(\s*at\s*\)\s*", "@"),
-        (r"\s+at\s+", "@"),
-        (r"\s*\[\s*dot\s*\]\s*", "."),
-        (r"\s*\(\s*dot\s*\)\s*", "."),
-        (r"\s+dot\s+", "."),
-    ]
-
-    CONCAT_REGEX = re.compile(
-        r"['\"]([a-zA-Z0-9._%+-]+)['\"]\s*\+\s*['\"]@['\"]\s*\+\s*['\"]([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})['\"]"
-    )
-
-    BASE64_CALL_REGEX = re.compile(
-        r"atob\(\s*['\"]([A-Za-z0-9+/=]{20,})['\"]\s*\)"
-    )
-
-    BASE64_TOKEN_REGEX = re.compile(
-        r"\b[A-Za-z0-9+/=]{24,}\b"
-    )
 
     # -------------------------------------------------
     # Public API
@@ -55,21 +30,21 @@ class EmailAnalyzer:
         lowered = text.lower()
 
         # Plain emails
-        for e in self.EMAIL_REGEX.findall(lowered):
+        for e in C.EMAIL_REGEX.findall(lowered):
             found.add(e)
 
         # Obfuscation replacement
         candidate = lowered
-        for pattern, repl in self.OBFUSCATED_PATTERNS:
+        for pattern, repl in C.OBFUSCATED_PATTERNS:
             candidate = re.sub(pattern, repl, candidate)
 
-        for e in self.EMAIL_REGEX.findall(candidate):
+        for e in C.EMAIL_REGEX.findall(candidate):
             found.add(e)
 
         # JS concatenation patterns
-        for user, domain in self.CONCAT_REGEX.findall(text):
+        for user, domain in C.CONCAT_REGEX.findall(text):
             email = f"{user}@{domain}".lower()
-            if self.EMAIL_REGEX.match(email):
+            if C.EMAIL_REGEX.match(email):
                 found.add(email)
 
         # HTML entities and JS escapes
@@ -80,17 +55,17 @@ class EmailAnalyzer:
         except Exception:
             pass
 
-        for e in self.EMAIL_REGEX.findall(unescaped.lower()):
+        for e in C.EMAIL_REGEX.findall(unescaped.lower()):
             found.add(e)
 
         # Base64 inside atob()
-        for token in self.BASE64_CALL_REGEX.findall(text):
+        for token in C.BASE64_CALL_REGEX.findall(text):
             self._decode_base64_email(token, found)
 
         # Raw Base64 tokens
         compact = re.sub(r"\s+", "", text)
 
-        for token in self.BASE64_TOKEN_REGEX.findall(compact):
+        for token in C.BASE64_TOKEN_REGEX.findall(compact):
             self._decode_base64_email(token, found)
 
         return found
@@ -123,7 +98,7 @@ class EmailAnalyzer:
         try:
             decoded = base64.b64decode(token).decode("utf-8", errors="ignore")
 
-            for e in self.EMAIL_REGEX.findall(decoded.lower()):
+            for e in C.EMAIL_REGEX.findall(decoded.lower()):
                 found.add(e)
 
         except Exception:

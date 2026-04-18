@@ -12,9 +12,9 @@ class CollectorError(ErebusError):
     pass
 
 
-class AnalyzerError(ErebusError):
+class DatabaseError(ErebusError):
     """
-    Exception raised when an analyzer fails to process data.
+    Exception raised when a database operation fails.
     """
     pass
 
@@ -22,5 +22,11 @@ class AnalyzerError(ErebusError):
 class ConfigurationError(ErebusError):
     """
     Exception raised when there is a configuration issue.
+    """
+    pass
+
+class ParserError(ErebusError):
+    """
+    Exception raised when a parser fails to process input data.
     """
     pass

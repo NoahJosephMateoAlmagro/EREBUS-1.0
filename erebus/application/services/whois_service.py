@@ -18,7 +18,7 @@ class WhoisService:
         self.whois_collector = whois_collector
         self.uow = uow
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
         """
         Executes WHOIS collection workflow.
 

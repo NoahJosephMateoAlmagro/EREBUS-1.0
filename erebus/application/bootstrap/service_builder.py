@@ -11,7 +11,7 @@ from collectors.passive.DNS_Details.DNS_NS_Collector import DNS_NS_Collector
 from collectors.active.robots_Collector import RobotsCollector
 from collectors.active.sitemap_Collector import SitemapCollector
 from collectors.passive.waybackMachine_Collector import WaybackCollector
-from collectors.active.http_headers_Collector import HttpHeadersCollector
+from collectors.active.http_headers_Collector import HTTPHeadersCollector
 from collectors.active.crawler import Crawler
 from collectors.active.scraper import Scraper
 from collectors.active.nmap_collector import NmapCollector
@@ -42,7 +42,6 @@ from application.services.crawling_services.crawling_service import CrawlingServ
 from application.services.JS_parsing_service import JSParsingService
 from application.services.file_parsing_service import FileParsingService
 from application.services.scraping_service import ScrapingService
-from application.services.print_debug_service import PrintDebugService
 
 
 
@@ -108,7 +107,7 @@ class ServiceBuilder:
             cdx_limit=int(cfg["limits"]["cdx_url_limit"])
         )
 
-        http_headers_collector = HttpHeadersCollector(
+        http_headers_collector = HTTPHeadersCollector(
             timeout=cfg["timeouts"]["http_headers"]
         )
 
@@ -224,7 +223,6 @@ class ServiceBuilder:
             self.domain_validator
         )
 
-        print_debug_service = PrintDebugService(uow)
 
         return {
             "subdomain": subdomain_service,
@@ -237,6 +235,5 @@ class ServiceBuilder:
             "js": js_parsing_service,
             "file": file_parsing_service,
             "scraping": scraping_service,
-            "debug": print_debug_service,
             "shodan": shodan_service
         }

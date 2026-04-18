@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 
 import shared.constants as C
 from application.objects.responses.ModuleResponse import ModuleResponse, ModuleStatus
-from exceptions.exceptions import CollectorError
+from exceptions.exceptions import  ParserError
 from shared.logger import Logger
 
 
@@ -26,7 +26,7 @@ class JSParsingService:
         self.email_analyzer = email_analyzer
         self.uow = uow
 
-    def run(self, context) -> ModuleResponse | None:
+    def run(self, context) -> ModuleResponse:
         """
         Executes JavaScript parsing workflow over collected live results.
 
@@ -53,6 +53,7 @@ class JSParsingService:
 
         metrics = {
             "scripts_limit": int(context.cfg["limits"]["js_max_scripts"]),
+            "scripts_failed":0,
             "scripts_processed": 0,
             "emails_matched_raw": 0,
             "emails_normalized_ok": 0,
@@ -85,14 +86,8 @@ class JSParsingService:
                     if not page_url or "@" in page_url:
                         continue
 
-                    self._process_page(context, page, metrics)
+                    self._process_page(context, page, metrics, response)
 
-                except CollectorError as e:
-                    Logger.error(
-                        f"JS parsing collector error execution_id={execution_id} "
-                        f"target={target} url={page.get('url', 'unknown')}: {e}",
-                        context=self.__class__.__name__
-                    )
 
                 except Exception as e:
                     Logger.error(
@@ -102,15 +97,6 @@ class JSParsingService:
                     )
 
             response.metrics = metrics
-
-        except CollectorError as e:
-            response.status = ModuleStatus.FAILED
-            response.errors.append(str(e))
-
-            Logger.error(
-                f"JS parsing collector error execution_id={execution_id} target={target}: {e}",
-                context=self.__class__.__name__
-            )
 
         except Exception as e:
             response.status = ModuleStatus.FAILED
@@ -132,7 +118,7 @@ class JSParsingService:
 
         return response
 
-    def _process_page(self, context, page, metrics) -> None:
+    def _process_page(self, context, page, metrics, response) -> None:
         """
         Processes JavaScript references from a single page result.
 
@@ -140,6 +126,7 @@ class JSParsingService:
             context: Execution context containing execution metadata and deduplication state
             page: Page result containing the source URL and script references
             metrics: Mutable metrics dictionary updated in place
+            response: Module response used to accumulate non-fatal errors
         """
         origin = page.get("origin")
 
@@ -161,22 +148,48 @@ class JSParsingService:
             if metrics["scripts_processed"] >= metrics["scripts_limit"]:
                 break
 
-            parsed = self.js_parser.parse(script_url, page_host)
-            if not parsed:
+            try:
+                parsed = self.js_parser.parse(script_url, page_host)
+                if not parsed:
+                    continue
+
+                metrics["scripts_processed"] += 1
+
+                self.uow.crawler.insert_js_result(
+                    context.execution.ID,
+                    parsed["script_url"],
+                    parsed.get("emails", []),
+                    parsed.get("urls", [])
+                )
+
+                self._process_emails(context, parsed, script_url, technique, metrics)
+                self._process_credentials(context, parsed, script_url, technique, metrics)
+
+            except ParserError as e:
+                metrics["scripts_failed"] += 1
+
+                Logger.error(
+                    f"JS parsing script error execution_id={context.execution.ID} "
+                    f"script_url={script_url}: {e}",
+                    context=self.__class__.__name__
+                )
+
+                response.errors.append(f"Script parse failed: {script_url} ({e})")
                 continue
 
-            metrics["scripts_processed"] += 1
+            except Exception as e:
+                metrics["scripts_failed"] += 1
 
-            self.uow.crawler.insert_js_result(
-                context.execution.ID,
-                parsed["script_url"],
-                parsed.get("emails", []),
-                parsed.get("urls", [])
-            )
+                Logger.error(
+                    f"Unexpected JS script error execution_id={context.execution.ID} "
+                    f"script_url={script_url}: {e}",
+                    context=self.__class__.__name__
+                )
 
-            self._process_emails(context, parsed, script_url, technique, metrics)
-            self._process_credentials(context, parsed, script_url, technique, metrics)
-
+                response.errors.append(
+                    f"Unexpected script error in {script_url}: {e}"
+                )
+                continue
     def _process_emails(self, context, parsed, script_url, technique, metrics) -> None:
         """
         Extracts, normalizes and persists emails from parsed JavaScript content.

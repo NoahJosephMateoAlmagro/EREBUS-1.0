@@ -2,7 +2,7 @@ from .base import BaseFileParser
 
 import shared.constants as C
 from shared.logger import Logger
-
+from exceptions.exceptions import ParserError
 
 class TxtParser(BaseFileParser):
     """
@@ -26,8 +26,9 @@ class TxtParser(BaseFileParser):
             return content.decode("utf-8", errors="ignore")
 
         except Exception as e:
+
             Logger.error(
                 f"TXT parsing error: {e}",
                 context=self.__class__.__name__
             )
-            return ""
+            raise ParserError("Failed to parse TXT content") from e
