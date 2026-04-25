@@ -9,8 +9,7 @@ class BaseRepository:
     This class centralizes common database access methods used by all repositories,
     including query execution and data retrieval.
 
-    It assumes a valid SQLite connection.
-    Transaction control should be handled by the UnitOfWork.
+    It assumes a valid SQLite connection and performs immediate commits on write operations.
     """
 
     def __init__(self, conn):
@@ -26,6 +25,8 @@ class BaseRepository:
         """
         Executes a write operation (INSERT, UPDATE, DELETE).
 
+        This method automatically commits the transaction after execution.
+
         Args:
             query: SQL query string
             params: Query parameters tuple
@@ -36,6 +37,7 @@ class BaseRepository:
         try:
             cursor = self.conn.cursor()
             cursor.execute(query, params)
+            self.conn.commit()
             return cursor
 
         except sqlite3.IntegrityError as e:

@@ -176,21 +176,6 @@ SCHEMA_SQL = """
         );
 
         /* ------------------------
-        -- Execution metrics
-        -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS execution_metrics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            execution_id TEXT NOT NULL,
-            module_name TEXT NOT NULL,
-            metric_name TEXT NOT NULL,
-            metric_value INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(execution_id, module_name, metric_name),
-            FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
-
-        );
-
-        /* ------------------------
         -- API credentials
         -- ------------------------*/
         CREATE TABLE IF NOT EXISTS api_credentials (
