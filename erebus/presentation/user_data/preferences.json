@@ -8,7 +8,7 @@
         "cdx_url_limit": 200,
         "crawler_live_max_pages": 200,
         "crawler_wayback_max_pages": 50,
-        "dns_max_domains": 50,
+        "dns_max_domains": 10,
         "file_max_files": 120,
         "file_max_size": 26214400,
         "file_max_workers": 5,
@@ -25,21 +25,21 @@
         "timezone": "Europe/Madrid"
       },
       "modules": {
-        "crawling": false,
-        "dns": false,
-        "email_passive": false,
-        "file_parsing": false,
-        "http_headers": false,
-        "js_parsing": false,
-        "nmap": false,
-        "scraping": false,
-        "shodan": false,
+        "crawling": true,
+        "dns": true,
+        "email_passive": true,
+        "file_parsing": true,
+        "http_headers": true,
+        "js_parsing": true,
+        "nmap": true,
+        "scraping": true,
+        "shodan": true,
         "subdomains": true,
-        "wayback": false,
-        "whois": false
+        "wayback": true,
+        "whois": true
       },
       "retries": {
-        "crtsh_max_attempts": 10
+        "crtsh_max_attempts": 50
       },
       "timeouts": {
         "crawler_live_page": 3,

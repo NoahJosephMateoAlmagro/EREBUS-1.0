@@ -72,7 +72,10 @@ def run_erebus(
         progress_callback: Optional callback used to notify the UI about module progress.
 
     Returns:
-        Execution: Execution object after finishing, failing or being cancelled.
+        dict | None: Dictionary containing:
+            - execution: Persisted execution entity
+            - execution_response: Structured orchestrator response
+        Returns None if the target is empty.
     """
     if not target:
         Logger.error("Empty target provided", context="Runner")
@@ -99,6 +102,7 @@ def run_erebus(
     uow.executions.insert(execution)
 
     orchestrator = Orchestrator(uow)
+    execution_response = None
 
     try:
         Logger.info(
@@ -106,7 +110,7 @@ def run_erebus(
             context="Runner",
         )
 
-        orchestrator.run(
+        execution_response = orchestrator.run(
             execution,
             cfg,
             cancel_event=cancel_event,
@@ -154,4 +158,7 @@ def run_erebus(
 
     Logger.info("END EREBUS", context="Runner")
 
-    return execution
+    return {
+        "execution": execution,
+        "execution_response": execution_response,
+    }

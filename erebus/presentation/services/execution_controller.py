@@ -13,6 +13,7 @@ from application.runner import run_erebus
 
 import presentation.constants as C
 from presentation.module_ui_metadata import MODULE_UI_CONFIG
+from presentation.services.results_summary_builder import ResultsSummaryBuilder
 
 
 class ExecutionController:
@@ -45,6 +46,8 @@ class ExecutionController:
         self.execution_thread = None
         self.cancel_event = None
         self.running_modules = set()
+        self.results_summary_builder = ResultsSummaryBuilder()
+        self.last_config_overrides = None
 
     def load_persistent_state(self) -> None:
         """
@@ -85,6 +88,7 @@ class ExecutionController:
         self.save_persistent_state()
 
         config_overrides = self.execution_page.get_config_overrides()
+        self.last_config_overrides = config_overrides
 
         self.cancel_event = threading.Event()
         self.running_modules.clear()
@@ -153,23 +157,41 @@ class ExecutionController:
             cancel_event: Event used to request safe cancellation.
         """
         try:
-            execution = run_erebus(
+            result = run_erebus(
                 target=target,
                 config_overrides=config_overrides,
                 cancel_event=cancel_event,
                 progress_callback=self.on_module_progress,
             )
 
+            execution = None
+            execution_response = None
+
+            if isinstance(result, dict):
+                execution = result.get("execution")
+                execution_response = result.get("execution_response")
+
             if cancel_event and cancel_event.is_set():
                 message = C.STATUS_CANCELLED
                 popup_message = C.EXECUTION_CANCELLED_POPUP
 
-            elif execution:
+            elif execution is not None:
                 message = f"Status: {execution.STATUS}"
                 popup_message = C.EXECUTION_FINISHED_POPUP.format(
                     target=target,
                     status=execution.STATUS,
                 )
+
+                if execution_response is not None and hasattr(execution_response, "modules"):
+                    summary = self.results_summary_builder.build(
+                        execution_response=execution_response,
+                        config_overrides=self.last_config_overrides,
+                    )
+
+                    self.app.after(
+                        0,
+                        lambda s=summary: self.app.layout.results_tab.render_summary(s),
+                    )
 
             else:
                 message = C.STATUS_EXECUTION_FAILED

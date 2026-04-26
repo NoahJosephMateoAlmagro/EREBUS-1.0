@@ -37,6 +37,28 @@ MODULES_DESCRIPTION = (
 CONSOLE_TITLE = "Runtime console"
 CONSOLE_READY_TEXT = "[Console ready]\n"
 
+RESULTS_TITLE = "Latest results"
+RESULTS_EMPTY_TEXT = "No execution summary available yet."
+RESULTS_LATEST_EXECUTION_TITLE = "Latest execution"
+RESULTS_FINDINGS_TITLE = "Most important findings"
+RESULTS_MODULE_SUMMARY_TITLE = "Module summary"
+RESULTS_NO_FINDINGS_TEXT = "No important findings were generated."
+RESULTS_NO_MODULE_RESULTS_TEXT = "No module results available."
+RESULTS_NO_MODULE_FINDINGS_TEXT = "No relevant findings for this module."
+
+RESULTS_LABEL_TARGET = "Target"
+RESULTS_LABEL_STARTED_AT = "Started at"
+RESULTS_LABEL_DURATION = "Duration"
+RESULTS_LABEL_ACTIVE_MODULES = "Active modules"
+
+RESULTS_STATUS_PREFIX = "Status:"
+RESULTS_DURATION_PREFIX = "Duration:"
+RESULTS_NO_RESULTS = "No results"
+RESULTS_STATUS_UNKNOWN = "Unknown"
+RESULTS_VALUE_EMPTY = "-"
+RESULTS_UTC_SUFFIX = "UTC"
+RESULTS_DURATION_FORMAT = "{seconds:.2f} s"
+
 STATUS_READY = "Status: Ready"
 STATUS_RUNNING = "Status: Running"
 STATUS_CANCELLING = "Status: Cancelling"

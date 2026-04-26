@@ -11,6 +11,7 @@ import presentation.constants as C
 from presentation.pages.console_page import ConsolePage
 from presentation.pages.execution_page import ExecutionPage
 from presentation.pages.placeholder_page import PlaceholderPage
+from presentation.pages.results_page import ResultsPage
 from presentation.theme import get_theme_palette
 
 
@@ -277,9 +278,8 @@ class AppLayout:
             fonts=self.fonts,
         )
 
-        self.results_tab = PlaceholderPage(
+        self.results_tab = ResultsPage(
             parent=self.content_area,
-            text=C.PLACEHOLDER_RESULTS_TEXT,
             fonts=self.fonts,
         )
 

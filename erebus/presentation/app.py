@@ -38,6 +38,8 @@ class ErebusApp(ctk.CTk):
         """
         super().__init__()
 
+        self.withdraw()
+
         load_app_fonts()
 
         self.title(C.APP_TITLE)
@@ -113,24 +115,55 @@ class ErebusApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.console_controller.start()
 
-        self.after(100, self.maximize_window)
+        self.after_idle(self._show_startup_window)
 
     def _set_initial_window_size(self) -> None:
         """
-        Sets a safe initial window size before the full UI is rendered.
+        Sets the initial window size using a centered 16:9 layout.
+
+        The application starts in a large normal window instead of forcing an
+        unreliable maximized state. The user can maximize it manually later.
         """
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
 
-        self.geometry(f"{screen_width}x{screen_height}+0+0")
+        max_width = int(screen_width * 0.85)
+        max_height = int(screen_height * 0.85)
+
+        width_from_height = int(max_height * (16 / 9))
+        height_from_width = int(max_width * (9 / 16))
+
+        if width_from_height <= max_width:
+            width = width_from_height
+            height = max_height
+        else:
+            width = max_width
+            height = height_from_width
+
+        width = max(width, C.APP_MIN_WIDTH)
+        height = max(height, C.APP_MIN_HEIGHT)
+
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+
+        self.geometry(f"{width}x{height}+{x}+{y}")
         self.minsize(C.APP_MIN_WIDTH, C.APP_MIN_HEIGHT)
+
+    def _show_startup_window(self) -> None:
+        """
+        Shows the window after the interface has been fully built and laid out.
+        """
+        if self._closing or not self.winfo_exists():
+            return
+
+        self.update_idletasks()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
 
     def maximize_window(self) -> None:
         """
-        Maximizes the application window.
-
-        This is executed after the interface has been built to avoid the window
-        being restored to a normal state during startup.
+        Maximizes the application window if requested explicitly.
         """
         if self._closing or not self.winfo_exists():
             return
@@ -141,6 +174,8 @@ class ErebusApp(ctk.CTk):
             self.geometry(
                 f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0"
             )
+
+        self.update_idletasks()
 
     def show_tab(self, tab_name: str) -> None:
         """
