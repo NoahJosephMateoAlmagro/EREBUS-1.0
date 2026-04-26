@@ -1,3 +1,12 @@
+"""
+UI metadata for EREBUS analysis modules and configuration fields.
+
+This module describes how engine modules and runtime configuration keys are
+presented in the graphical interface. It does not define execution behavior;
+it only contains presentation metadata such as titles, descriptions,
+dependencies displayed in the UI, labels and tooltips.
+"""
+
 MODULE_UI_CONFIG = {
     "subdomains": {
         "title": "Subdomains",
