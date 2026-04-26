@@ -25,6 +25,7 @@ from presentation.pages.execution_page import ExecutionPage
 from presentation.pages.placeholder_page import PlaceholderPage
 from presentation.services.console_redirector import ConsoleRedirector
 from presentation.theme import build_fonts, get_theme_palette
+from presentation.widgets.loading_overlay import LoadingOverlay
 from presentation.widgets.notification_popup import NotificationPopup
 
 
@@ -89,7 +90,16 @@ class ErebusApp(ctk.CTk):
         self.results_tab = None
         self.console_tab = None
 
+        self._closing = False
+        self._pending_overlay_callback_id = None
+        self._pending_overlay_hide_id = None
+
         self.notification_popup = NotificationPopup(
+            parent=self,
+            fonts=self.fonts,
+            get_palette_callback=self._get_palette,
+        )
+        self.loading_overlay = LoadingOverlay(
             parent=self,
             fonts=self.fonts,
             get_palette_callback=self._get_palette,
@@ -130,12 +140,16 @@ class ErebusApp(ctk.CTk):
         This is executed after the UI has been built to avoid Windows or Tkinter
         restoring the window back to a normal state during startup.
         """
+        if self._closing or not self.winfo_exists():
+            return
+
         try:
             self.state("zoomed")
         except ctk.TclError:
             self.geometry(
                 f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0"
             )
+
     def _build_ui(self):
         """
         Builds the main window layout.
@@ -394,12 +408,22 @@ class ErebusApp(ctk.CTk):
 
         self.active_tab = tab_name
         self._apply_theme()
-        
+
     def toggle_theme(self):
         """
         Toggles the application theme between dark and light mode.
         """
+        self._run_with_loading_overlay(
+            message="Applying theme...",
+            callback=self._apply_theme_change,
+        )
+
+    def _apply_theme_change(self):
+        """
+        Applies the actual theme change while the loading overlay is visible.
+        """
         was_zoomed = self.state() == "zoomed"
+        current_tab = self.active_tab
 
         if self.current_theme == C.THEME_DARK:
             self.current_theme = C.THEME_LIGHT
@@ -411,6 +435,7 @@ class ErebusApp(ctk.CTk):
             self.theme_button.configure(text="Light mode")
 
         self._apply_theme()
+        self._raise_active_tab(current_tab)
 
         if was_zoomed:
             self.after(10, self._maximize_window)
@@ -447,6 +472,7 @@ class ErebusApp(ctk.CTk):
                 hover_color=palette["secondary_hover"],
                 text_color=palette["text"],
             )
+
         if self.size_menu:
             self.size_menu.configure(
                 fg_color=palette["secondary"],
@@ -457,6 +483,7 @@ class ErebusApp(ctk.CTk):
                 dropdown_hover_color=palette["soft"],
                 dropdown_text_color=palette["text"],
             )
+
         for name, button in self.tab_buttons.items():
             is_active = name == self.active_tab
 
@@ -481,6 +508,7 @@ class ErebusApp(ctk.CTk):
             self.console_tab.apply_theme(palette)
 
         self.notification_popup.apply_theme()
+        self.loading_overlay.apply_theme()
 
     def _start_console_redirection(self):
         """
@@ -502,6 +530,9 @@ class ErebusApp(ctk.CTk):
         This method runs on the Tkinter main thread, which makes it safe to
         update CustomTkinter widgets.
         """
+        if self._closing or not self.winfo_exists():
+            return
+
         try:
             while True:
                 stream_name, message = self.console_queue.get_nowait()
@@ -520,6 +551,32 @@ class ErebusApp(ctk.CTk):
         """
         Restores stdout and stderr before closing the application.
         """
+        self._closing = True
+
+        if self._pending_overlay_callback_id:
+            try:
+                self.after_cancel(self._pending_overlay_callback_id)
+            except Exception:
+                pass
+            self._pending_overlay_callback_id = None
+
+        if self._pending_overlay_hide_id:
+            try:
+                self.after_cancel(self._pending_overlay_hide_id)
+            except Exception:
+                pass
+            self._pending_overlay_hide_id = None
+
+        try:
+            self.loading_overlay.hide()
+        except Exception:
+            pass
+
+        try:
+            self.notification_popup.hide()
+        except Exception:
+            pass
+
         sys.stdout = self.original_stdout
         sys.stderr = self.original_stderr
         self.destroy()
@@ -622,6 +679,9 @@ class ErebusApp(ctk.CTk):
             popup_message = C.EXECUTION_FAILED_POPUP.format(target=target)
             print(f"[GUI] Execution failed: {exc}", file=sys.stderr)
 
+        if self._closing or not self.winfo_exists():
+            return
+
         self.after(0, lambda: self.execution_tab.set_status(message))
         self.after(0, lambda: self.execution_tab.set_running_state(False))
         self.after(0, self.running_modules.clear)
@@ -644,6 +704,9 @@ class ErebusApp(ctk.CTk):
             event_type: Event type. Expected values are 'start', 'end' or 'error'.
             module_key: Internal module key.
         """
+        if self._closing or not self.winfo_exists():
+            return
+
         self.after(
             0,
             lambda: self._handle_module_progress(event_type, module_key),
@@ -698,17 +761,32 @@ class ErebusApp(ctk.CTk):
         if scale_name not in C.UI_SCALE_VALUES:
             return
 
-        self.current_ui_scale_name = scale_name
-        self.current_ui_scale = C.UI_SCALE_VALUES[scale_name]
+        self._run_with_loading_overlay(
+            message="Resizing interface...",
+            callback=lambda: self._apply_ui_scale_change(scale_name),
+        )
 
+    def _apply_ui_scale_change(self, scale_name):
+        """
+        Applies the actual UI scale change while the loading overlay is visible.
+
+        Args:
+            scale_name: Selected scale name.
+        """
         current_tab = self.active_tab
         was_zoomed = self.state() == "zoomed"
+
+        self.current_ui_scale_name = scale_name
+        self.current_ui_scale = C.UI_SCALE_VALUES[scale_name]
 
         ctk.set_widget_scaling(self.current_ui_scale)
         self._configure_font_sizes()
 
-        self.active_tab = current_tab
-        self._show_tab(current_tab)
+        if self.size_menu:
+            self.size_menu.set(scale_name)
+
+        self._apply_theme()
+        self._raise_active_tab(current_tab)
 
         if was_zoomed:
             self.after(10, self._maximize_window)
@@ -729,6 +807,93 @@ class ErebusApp(ctk.CTk):
                 int(round(C.FONT_BASE_SIZES[font_key] * self.current_ui_scale)),
             )
             font.configure(size=scaled_size)
+
+    def _run_with_loading_overlay(self, message, callback):
+        """
+        Runs a visual update while showing a temporary loading overlay.
+
+        The overlay is displayed first and the visual update is delayed slightly so
+        Tkinter has time to paint the overlay before the expensive redraw starts.
+
+        Args:
+            message: Message displayed in the overlay.
+            callback: Function executed while the overlay is visible.
+        """
+        if self._closing or not self.winfo_exists():
+            return
+
+        self.loading_overlay.show(message)
+
+        self._pending_overlay_callback_id = self.after(
+            C.LOADING_OVERLAY_START_DELAY_MS,
+            lambda: self._execute_overlay_callback(callback),
+        )
+
+    def _execute_overlay_callback(self, callback):
+        """
+        Executes a delayed callback and hides the loading overlay afterwards.
+
+        The overlay remains visible for a short delay after the callback finishes so
+        the user does not see the final redraw and geometry recalculation.
+
+        Args:
+            callback: Function to execute.
+        """
+        self._pending_overlay_callback_id = None
+
+        if self._closing or not self.winfo_exists():
+            return
+
+        try:
+            callback()
+            self.update_idletasks()
+        finally:
+            if self._closing or not self.winfo_exists():
+                return
+
+            self._pending_overlay_hide_id = self.after(
+                C.LOADING_OVERLAY_HIDE_DELAY_MS,
+                self._hide_loading_overlay_safe,
+            )
+
+    def _hide_loading_overlay_safe(self):
+        """
+        Hides the loading overlay safely if the application is still alive.
+        """
+        self._pending_overlay_hide_id = None
+
+        if self._closing or not self.winfo_exists():
+            return
+
+        self.loading_overlay.hide()
+
+    def _raise_active_tab(self, tab_name):
+        """
+        Raises the selected tab without reapplying the visual theme.
+
+        This is useful during theme and scale changes because applying the theme
+        twice causes extra redraw flickering.
+
+        Args:
+            tab_name: Name of the tab to raise.
+        """
+        page = None
+
+        if tab_name == C.TAB_EXECUTION:
+            page = self.execution_tab
+        elif tab_name == C.TAB_DATA:
+            page = self.data_tab
+        elif tab_name == C.TAB_RESULTS:
+            page = self.results_tab
+        elif tab_name == C.TAB_CONSOLE:
+            page = self.console_tab
+
+        if page:
+            page.grid()
+            page.tkraise()
+
+        self.active_tab = tab_name
+
 
 if __name__ == "__main__":
     app = ErebusApp()
