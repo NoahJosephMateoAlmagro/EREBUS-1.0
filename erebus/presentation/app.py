@@ -18,6 +18,7 @@ from presentation.services.appearance_controller import AppearanceController
 from presentation.services.console_controller import ConsoleController
 from presentation.services.execution_controller import ExecutionController
 from presentation.services.navigation_controller import NavigationController
+from presentation.services.user_preference_service import UserPreferencesService
 from presentation.theme import build_fonts
 from presentation.widgets.loading_overlay import LoadingOverlay
 from presentation.widgets.notification_popup import NotificationPopup
@@ -77,6 +78,8 @@ class ErebusApp(ctk.CTk):
             get_palette_callback=lambda: self.appearance.get_palette(),
         )
 
+        self.user_preferences_service = UserPreferencesService()
+
         self.navigation = NavigationController(
             app=self,
             layout=self.layout,
@@ -99,10 +102,13 @@ class ErebusApp(ctk.CTk):
             app=self,
             execution_page=self.layout.execution_tab,
             notification_popup=self.notification_popup,
+            user_preferences_service=self.user_preferences_service,
         )
 
         self.appearance.apply_theme()
         self.navigation.show_tab(C.TAB_EXECUTION)
+
+        self.execution_controller.load_persistent_state()
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.console_controller.start()
@@ -177,6 +183,11 @@ class ErebusApp(ctk.CTk):
         Restores resources and closes the application safely.
         """
         self._closing = True
+
+        try:
+            self.execution_controller.save_persistent_state()
+        except Exception:
+            pass
 
         try:
             self.appearance.cancel_pending_updates()

@@ -5,6 +5,8 @@ This page contains the target input, execution controls, global settings and
 module configuration widgets.
 """
 
+from copy import deepcopy
+
 import customtkinter as ctk
 
 from application.config import APP_CONFIG
@@ -733,6 +735,143 @@ class ExecutionPage(ctk.CTkFrame):
             overrides[section][key] = parsed_value
 
         return overrides
+
+    def get_persistent_state(self) -> dict:
+        """
+        Extracts the stable user-editable state of the execution page.
+
+        This method is intended for JSON persistence. It stores only stable form
+        values and excludes transient runtime state such as progress or current
+        execution status.
+
+        Returns:
+            dict: Persistent execution form state.
+        """
+        return {
+            "target": self.get_target(),
+            "config_overrides": deepcopy(self.get_config_overrides()),
+        }
+
+    def apply_persistent_state(self, data: dict) -> None:
+        """
+        Applies persisted execution form values to the current page.
+
+        Args:
+            data: Persistent execution form state previously loaded from disk.
+        """
+        if not isinstance(data, dict):
+            return
+
+        target = data.get("target", "")
+        config_overrides = data.get("config_overrides", {})
+
+        self._apply_target_value(target)
+        self._apply_config_overrides(config_overrides)
+
+    def _apply_target_value(self, target: str) -> None:
+        """
+        Applies a persisted target value to the target input widget.
+
+        Args:
+            target: Persisted domain or target string.
+        """
+        if not self.target_entry:
+            return
+
+        try:
+            self.target_entry.delete(0, "end")
+            if target:
+                self.target_entry.insert(0, target)
+        except Exception:
+            pass
+
+    def _apply_config_overrides(self, config_overrides: dict) -> None:
+        """
+        Applies persisted configuration overrides to the page widgets.
+
+        Args:
+            config_overrides: Persisted runtime configuration overrides.
+        """
+        if not isinstance(config_overrides, dict):
+            return
+
+        self._load_overrides_into_widgets(config_overrides)
+
+    def _load_overrides_into_widgets(self, config_overrides: dict) -> None:
+        """
+        Maps a persisted override dictionary back into the execution page widgets.
+
+        Args:
+            config_overrides: Persisted runtime configuration overrides.
+        """
+        modules = config_overrides.get("modules", {})
+        if isinstance(modules, dict):
+            for module_key, enabled in modules.items():
+                switch = self.module_switches.get(module_key)
+                frame = self.module_settings_frames.get(module_key)
+
+                if not switch:
+                    continue
+
+                if enabled:
+                    switch.select()
+                    if frame:
+                        frame.grid()
+                else:
+                    switch.deselect()
+                    if frame:
+                        frame.grid_remove()
+
+            for module_key, switch in self.module_switches.items():
+                if switch.get():
+                    if not self._dependencies_enabled(module_key):
+                        switch.deselect()
+                        frame = self.module_settings_frames.get(module_key)
+                        if frame:
+                            frame.grid_remove()
+
+            self._sync_all_modules_switch()
+
+        for section, values in config_overrides.items():
+            if section == "modules" or not isinstance(values, dict):
+                continue
+
+            for key, value in values.items():
+                full_key = f"{section}.{key}"
+                widget = self.config_entries.get(full_key)
+
+                if not widget:
+                    continue
+
+                self._apply_widget_value(widget, value)
+
+    def _apply_widget_value(self, widget, value) -> None:
+        """
+        Applies a persisted value to a supported CustomTkinter widget.
+
+        Args:
+            widget: Target widget.
+            value: Persisted value.
+        """
+        try:
+            if isinstance(widget, ctk.CTkSwitch):
+                if bool(value):
+                    widget.select()
+                else:
+                    widget.deselect()
+                return
+
+            if isinstance(widget, ctk.CTkOptionMenu):
+                widget.set(str(value))
+                return
+
+            if isinstance(widget, ctk.CTkEntry):
+                widget.delete(0, "end")
+                widget.insert(0, str(value))
+                return
+
+        except Exception:
+            pass
 
     def _get_widget_value(self, widget):
         """

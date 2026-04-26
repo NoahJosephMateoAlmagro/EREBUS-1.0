@@ -2,8 +2,8 @@
 Execution controller for EREBUS.
 
 This module contains the controller responsible for starting and stopping the
-background execution thread, updating the execution page and tracking module
-progress.
+background execution thread, updating the execution page, tracking module
+progress and persisting stable user preferences related to the execution form.
 """
 
 import sys
@@ -20,7 +20,13 @@ class ExecutionController:
     Controls execution lifecycle and progress updates for the GUI.
     """
 
-    def __init__(self, app, execution_page, notification_popup):
+    def __init__(
+        self,
+        app,
+        execution_page,
+        notification_popup,
+        user_preferences_service,
+    ):
         """
         Initializes the execution controller.
 
@@ -28,14 +34,39 @@ class ExecutionController:
             app: Root application instance.
             execution_page: Execution page widget.
             notification_popup: Notification popup widget.
+            user_preferences_service: Service used to load and save persistent
+                execution form preferences.
         """
         self.app = app
         self.execution_page = execution_page
         self.notification_popup = notification_popup
+        self.user_preferences_service = user_preferences_service
 
         self.execution_thread = None
         self.cancel_event = None
         self.running_modules = set()
+
+    def load_persistent_state(self) -> None:
+        """
+        Loads persisted execution form preferences and applies them to the page.
+        """
+        data = self.user_preferences_service.load_preferences()
+        execution_data = data.get("execution_form", {})
+
+        if isinstance(execution_data, dict):
+            self.execution_page.apply_persistent_state(execution_data)
+
+    def save_persistent_state(self) -> None:
+        """
+        Saves the current execution form preferences to disk.
+        """
+        current_data = self.user_preferences_service.load_preferences()
+
+        if not isinstance(current_data, dict):
+            current_data = {}
+
+        current_data["execution_form"] = self.execution_page.get_persistent_state()
+        self.user_preferences_service.save_preferences(current_data)
 
     def start_execution(self) -> None:
         """
@@ -50,6 +81,8 @@ class ExecutionController:
         if self.execution_thread and self.execution_thread.is_alive():
             self.execution_page.set_status(C.STATUS_ALREADY_RUNNING)
             return
+
+        self.save_persistent_state()
 
         config_overrides = self.execution_page.get_config_overrides()
 
