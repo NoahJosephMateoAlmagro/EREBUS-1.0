@@ -21,6 +21,9 @@ class ResultsPage(ctk.CTkFrame):
     Page used to present the latest execution summary.
     """
 
+    STATUS_BADGE_WIDTH = 170
+    STATUS_BADGE_HEIGHT = 32
+
     def __init__(self, parent, fonts):
         """
         Initializes the results page.
@@ -41,11 +44,13 @@ class ResultsPage(ctk.CTkFrame):
         self.highlights_container = None
         self.empty_label = None
 
-        self.status_badge = None
+        self.status_badge_info = None
         self.info_blocks = []
         self.highlight_tiles = []
         self.module_rows = []
         self.module_status_badges = []
+
+        self.current_palette = None
 
         self._build()
 
@@ -69,7 +74,7 @@ class ResultsPage(ctk.CTkFrame):
         """
         Clears all cached widgets that receive explicit theme updates.
         """
-        self.status_badge = None
+        self.status_badge_info = None
         self.info_blocks = []
         self.highlight_tiles = []
         self.module_rows = []
@@ -116,6 +121,10 @@ class ResultsPage(ctk.CTkFrame):
         self._build_highlights_card(summary)
         self._build_modules_card(summary)
 
+        # Reapply theme after recreating all widgets.
+        if self.current_palette:
+            self.apply_theme(self.current_palette)
+
     def _build_header_card(self, summary: dict) -> None:
         """
         Builds the main execution summary card.
@@ -134,15 +143,23 @@ class ResultsPage(ctk.CTkFrame):
         )
         title.grid(row=0, column=0, sticky="w", padx=24, pady=(22, 8))
 
-        self.status_badge = ctk.CTkLabel(
+        execution_status = summary.get("status", C.RESULTS_STATUS_UNKNOWN)
+
+        status_badge = ctk.CTkLabel(
             self.header_card,
-            text=f"{C.RESULTS_STATUS_PREFIX} {summary.get('status', C.RESULTS_STATUS_UNKNOWN)}",
+            text=f"{C.RESULTS_STATUS_PREFIX} {execution_status}",
             font=self.fonts["small_bold"],
             corner_radius=10,
-            padx=18,
-            pady=8,
+            width=self.STATUS_BADGE_WIDTH,
+            height=self.STATUS_BADGE_HEIGHT,
+            anchor="center",
         )
-        self.status_badge.grid(row=0, column=1, sticky="e", padx=24, pady=(22, 8))
+        status_badge.grid(row=0, column=1, sticky="e", padx=24, pady=(22, 8))
+
+        self.status_badge_info = {
+            "widget": status_badge,
+            "status": execution_status,
+        }
 
         info_frame = ctk.CTkFrame(self.header_card, fg_color="transparent")
         info_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=24, pady=(0, 14))
@@ -305,16 +322,25 @@ class ResultsPage(ctk.CTkFrame):
         )
         title.grid(row=0, column=0, sticky="w", padx=18, pady=(14, 4))
 
-        status = ctk.CTkLabel(
+        module_status = item.get("status", C.RESULTS_STATUS_UNKNOWN)
+
+        status_badge = ctk.CTkLabel(
             card,
-            text=f"{C.RESULTS_STATUS_PREFIX} {item.get('status', C.RESULTS_STATUS_UNKNOWN)}",
+            text=f"{C.RESULTS_STATUS_PREFIX} {module_status}",
             font=self.fonts["small_bold"],
             corner_radius=10,
-            padx=14,
-            pady=6,
+            width=self.STATUS_BADGE_WIDTH,
+            height=self.STATUS_BADGE_HEIGHT,
+            anchor="center",
         )
-        status.grid(row=0, column=1, sticky="e", padx=18, pady=(14, 4))
-        self.module_status_badges.append(status)
+        status_badge.grid(row=0, column=1, sticky="e", padx=18, pady=(14, 4))
+
+        self.module_status_badges.append(
+            {
+                "widget": status_badge,
+                "status": module_status,
+            }
+        )
 
         duration = ctk.CTkLabel(
             card,
@@ -380,6 +406,52 @@ class ResultsPage(ctk.CTkFrame):
         )
         value_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
 
+    def _normalize_status(self, status_value: str) -> str:
+        """
+        Normalizes a module or execution status string.
+
+        Args:
+            status_value: Raw status value.
+
+        Returns:
+            str: Normalized status.
+        """
+        text = str(status_value or "").strip().upper()
+
+        if text.startswith("MODULESTATUS."):
+            text = text.split(".", 1)[1]
+
+        return text
+
+    def _get_status_badge_colors(self, palette: dict, status_value: str) -> tuple[str, str]:
+        """
+        Resolves badge background and text color according to status.
+
+        Args:
+            palette: Active theme palette.
+            status_value: Raw or normalized status.
+
+        Returns:
+            tuple[str, str]: Background color and text color.
+        """
+        normalized = self._normalize_status(status_value)
+
+        if normalized == "FAILED":
+            return palette["status_failed_bg"], palette["status_failed_text"]
+
+        if normalized == "PARTIAL":
+            return palette["status_partial_bg"], palette["status_partial_text"]
+
+        if normalized == "SUCCESS":
+            return palette["status_success_bg"], palette["status_success_text"]
+
+        # SKIPPED vuelve al azul anterior:
+        # fondo azul "soft" y texto con el color principal como antes.
+        if normalized == "SKIPPED":
+            return palette["soft"], palette["primary"]
+
+        return palette["status_unknown_bg"], palette["status_unknown_text"]
+
     def _format_datetime(self, value) -> str:
         """
         Formats a datetime value for display.
@@ -417,6 +489,8 @@ class ResultsPage(ctk.CTkFrame):
         Args:
             palette: Active theme palette.
         """
+        self.current_palette = palette
+
         self.configure(fg_color=palette["panel"])
 
         if self.results_scroll:
@@ -439,14 +513,22 @@ class ResultsPage(ctk.CTkFrame):
         for row_card in self.module_rows:
             row_card.configure(fg_color=palette["soft"])
 
-        if self.status_badge:
-            self.status_badge.configure(
-                fg_color=palette["soft"],
-                text_color=palette["primary"],
+        if self.status_badge_info:
+            widget = self.status_badge_info["widget"]
+            status_value = self.status_badge_info["status"]
+            bg_color, text_color = self._get_status_badge_colors(palette, status_value)
+
+            widget.configure(
+                fg_color=bg_color,
+                text_color=text_color,
             )
 
-        for badge in self.module_status_badges:
-            badge.configure(
-                fg_color=palette["soft"],
-                text_color=palette["primary"],
+        for badge_info in self.module_status_badges:
+            widget = badge_info["widget"]
+            status_value = badge_info["status"]
+            bg_color, text_color = self._get_status_badge_colors(palette, status_value)
+
+            widget.configure(
+                fg_color=bg_color,
+                text_color=text_color,
             )

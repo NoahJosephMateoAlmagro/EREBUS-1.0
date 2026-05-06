@@ -90,6 +90,7 @@ def build_fonts(scale=1.0):
         ),
     }
 
+
 def is_dark_theme(theme_name):
     """
     Checks whether the current theme is dark.
@@ -150,5 +151,36 @@ def get_theme_palette(theme_name):
             C.COLORS["dark_bg"]
             if is_dark
             else C.COLORS["console_light_bg"]
+        ),
+
+        "status_success_bg": C.COLORS["status_success_bg"],
+        "status_success_text": C.COLORS["status_success_text"],
+
+        "status_failed_bg": C.COLORS["status_failed_bg"],
+        "status_failed_text": C.COLORS["status_failed_text"],
+
+        "status_partial_bg": C.COLORS["status_partial_bg"],
+        "status_partial_text": C.COLORS["status_partial_text"],
+
+        "status_skipped_bg": (
+            C.COLORS["status_skipped_bg_dark"]
+            if is_dark
+            else C.COLORS["status_skipped_bg_light"]
+        ),
+        "status_skipped_text": (
+            C.COLORS["status_skipped_text_dark"]
+            if is_dark
+            else C.COLORS["status_skipped_text_light"]
+        ),
+
+        "status_unknown_bg": (
+            C.COLORS["status_unknown_bg_dark"]
+            if is_dark
+            else C.COLORS["status_unknown_bg_light"]
+        ),
+        "status_unknown_text": (
+            C.COLORS["status_unknown_text_dark"]
+            if is_dark
+            else C.COLORS["status_unknown_text_light"]
         ),
     }

@@ -25,21 +25,21 @@
         "timezone": "Europe/Madrid"
       },
       "modules": {
-        "crawling": true,
+        "crawling": false,
         "dns": true,
-        "email_passive": true,
-        "file_parsing": true,
-        "http_headers": true,
-        "js_parsing": true,
-        "nmap": true,
-        "scraping": true,
-        "shodan": true,
+        "email_passive": false,
+        "file_parsing": false,
+        "http_headers": false,
+        "js_parsing": false,
+        "nmap": false,
+        "scraping": false,
+        "shodan": false,
         "subdomains": true,
-        "wayback": true,
+        "wayback": false,
         "whois": true
       },
       "retries": {
-        "crtsh_max_attempts": 50
+        "crtsh_max_attempts": 1
       },
       "timeouts": {
         "crawler_live_page": 3,
