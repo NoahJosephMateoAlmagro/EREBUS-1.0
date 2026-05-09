@@ -129,9 +129,15 @@ def get_theme_palette(theme_name):
             C.COLORS["accent_hover"] if is_dark else C.COLORS["light_hover"]
         ),
         "secondary": C.COLORS["blue"] if is_dark else C.COLORS["light_soft"],
-        "secondary_hover": C.COLORS["olive"] if is_dark else C.COLORS["light_hover"],
+        "secondary_hover": (
+            C.COLORS["olive"] if is_dark else C.COLORS["light_hover"]
+        ),
         "danger": C.COLORS["danger"],
         "danger_hover": C.COLORS["danger_hover"],
+
+        # -------------------------------------------------
+        # Warning colors used by popups and other UI pieces
+        # -------------------------------------------------
         "warning_bg": (
             C.COLORS["warning_bg_dark"]
             if is_dark
@@ -147,25 +153,49 @@ def get_theme_palette(theme_name):
             if is_dark
             else C.COLORS["warning_text_light"]
         ),
+
         "console_bg": (
             C.COLORS["dark_bg"]
             if is_dark
             else C.COLORS["console_light_bg"]
         ),
 
+        # -------------------------------------------------
+        # Reusable semantic colors
+        # -------------------------------------------------
+        "success_bg": C.COLORS["success_bg"],
+        "success_border": C.COLORS["success_border"],
+        "success_text": C.COLORS["success_text"],
+
+        "error_bg": C.COLORS["error_bg"],
+        "error_border": C.COLORS["error_border"],
+        "error_text": C.COLORS["error_text"],
+
+        # -------------------------------------------------
+        # Status badge palette
+        # Kept compatible with the existing results page.
+        # -------------------------------------------------
         "status_success_bg": C.COLORS["status_success_bg"],
+        "status_success_border": C.COLORS["status_success_border"],
         "status_success_text": C.COLORS["status_success_text"],
 
         "status_failed_bg": C.COLORS["status_failed_bg"],
+        "status_failed_border": C.COLORS["status_failed_border"],
         "status_failed_text": C.COLORS["status_failed_text"],
 
         "status_partial_bg": C.COLORS["status_partial_bg"],
+        "status_partial_border": C.COLORS["status_partial_border"],
         "status_partial_text": C.COLORS["status_partial_text"],
 
         "status_skipped_bg": (
             C.COLORS["status_skipped_bg_dark"]
             if is_dark
             else C.COLORS["status_skipped_bg_light"]
+        ),
+        "status_skipped_border": (
+            C.COLORS["status_skipped_border_dark"]
+            if is_dark
+            else C.COLORS["status_skipped_border_light"]
         ),
         "status_skipped_text": (
             C.COLORS["status_skipped_text_dark"]
@@ -177,6 +207,11 @@ def get_theme_palette(theme_name):
             C.COLORS["status_unknown_bg_dark"]
             if is_dark
             else C.COLORS["status_unknown_bg_light"]
+        ),
+        "status_unknown_border": (
+            C.COLORS["status_unknown_border_dark"]
+            if is_dark
+            else C.COLORS["status_unknown_border_light"]
         ),
         "status_unknown_text": (
             C.COLORS["status_unknown_text_dark"]

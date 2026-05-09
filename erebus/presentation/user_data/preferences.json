@@ -6,18 +6,18 @@
       },
       "limits": {
         "cdx_url_limit": 200,
-        "crawler_live_max_pages": 200,
-        "crawler_wayback_max_pages": 50,
-        "dns_max_domains": 10,
+        "crawler_live_max_pages": 500,
+        "crawler_wayback_max_pages": 200,
+        "dns_max_domains": 50,
         "file_max_files": 120,
         "file_max_size": 26214400,
         "file_max_workers": 5,
         "js_max_scripts": 50,
-        "nmap_batch_size": 5,
+        "nmap_batch_size": 10,
         "robots_max_urls": 20,
         "sitemap_max_urls": 20,
         "subdomain_max": 50,
-        "wayback_max_snapshots": 100,
+        "wayback_max_snapshots": 300,
         "wayback_min_year": 2000
       },
       "logging": {
@@ -25,28 +25,28 @@
         "timezone": "Europe/Madrid"
       },
       "modules": {
-        "crawling": false,
+        "crawling": true,
         "dns": true,
-        "email_passive": false,
-        "file_parsing": false,
-        "http_headers": false,
-        "js_parsing": false,
-        "nmap": false,
-        "scraping": false,
-        "shodan": false,
+        "email_passive": true,
+        "file_parsing": true,
+        "http_headers": true,
+        "js_parsing": true,
+        "nmap": true,
+        "scraping": true,
+        "shodan": true,
         "subdomains": true,
-        "wayback": false,
+        "wayback": true,
         "whois": true
       },
       "retries": {
-        "crtsh_max_attempts": 1
+        "crtsh_max_attempts": 50
       },
       "timeouts": {
         "crawler_live_page": 3,
         "crawler_wayback_page": 8,
         "dns_resolution": 15,
         "file_download": 2,
-        "http_headers": 5,
+        "http_headers": 15,
         "http_passive_email": 20,
         "http_robots": 5,
         "http_sitemap": 8,

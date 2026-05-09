@@ -23,6 +23,7 @@ class ResultsPage(ctk.CTkFrame):
 
     STATUS_BADGE_WIDTH = 170
     STATUS_BADGE_HEIGHT = 32
+    STATUS_BADGE_CORNER_RADIUS = 10
 
     def __init__(self, parent, fonts):
         """
@@ -121,7 +122,6 @@ class ResultsPage(ctk.CTkFrame):
         self._build_highlights_card(summary)
         self._build_modules_card(summary)
 
-        # Reapply theme after recreating all widgets.
         if self.current_palette:
             self.apply_theme(self.current_palette)
 
@@ -143,26 +143,32 @@ class ResultsPage(ctk.CTkFrame):
         )
         title.grid(row=0, column=0, sticky="w", padx=24, pady=(22, 8))
 
-        execution_status = summary.get("status", C.RESULTS_STATUS_UNKNOWN)
-
-        status_badge = ctk.CTkLabel(
-            self.header_card,
-            text=f"{C.RESULTS_STATUS_PREFIX} {execution_status}",
-            font=self.fonts["small_bold"],
-            corner_radius=10,
-            width=self.STATUS_BADGE_WIDTH,
-            height=self.STATUS_BADGE_HEIGHT,
-            anchor="center",
+        execution_status = self._normalize_status(
+            summary.get("status", C.RESULTS_STATUS_UNKNOWN)
         )
-        status_badge.grid(row=0, column=1, sticky="e", padx=24, pady=(22, 8))
 
-        self.status_badge_info = {
-            "widget": status_badge,
-            "status": execution_status,
-        }
+        badge_info = self._create_status_badge(
+            parent=self.header_card,
+            status_value=execution_status,
+        )
+        badge_info["widget"].grid(
+            row=0,
+            column=1,
+            sticky="e",
+            padx=24,
+            pady=(22, 8),
+        )
+        self.status_badge_info = badge_info
 
         info_frame = ctk.CTkFrame(self.header_card, fg_color="transparent")
-        info_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=24, pady=(0, 14))
+        info_frame.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            padx=24,
+            pady=(0, 14),
+        )
         info_frame.grid_columnconfigure((0, 1), weight=1)
 
         self._add_info_block(
@@ -190,7 +196,9 @@ class ResultsPage(ctk.CTkFrame):
         )
 
         active_modules = summary.get("active_modules", [])
-        active_names = ", ".join(item["title"] for item in active_modules) or C.RESULTS_VALUE_EMPTY
+        active_names = ", ".join(
+            item["title"] for item in active_modules
+        ) or C.RESULTS_VALUE_EMPTY
 
         self._add_info_block(
             info_frame,
@@ -221,7 +229,13 @@ class ResultsPage(ctk.CTkFrame):
             self.highlights_card,
             fg_color="transparent",
         )
-        self.highlights_container.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 22))
+        self.highlights_container.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=24,
+            pady=(0, 22),
+        )
         self.highlights_container.grid_columnconfigure((0, 1, 2), weight=1)
 
         highlights = summary.get("global_highlights", [])
@@ -282,7 +296,13 @@ class ResultsPage(ctk.CTkFrame):
             self.modules_card,
             fg_color="transparent",
         )
-        self.modules_container.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 22))
+        self.modules_container.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=24,
+            pady=(0, 22),
+        )
         self.modules_container.grid_columnconfigure(0, weight=1)
 
         module_cards = summary.get("module_cards", [])
@@ -322,32 +342,39 @@ class ResultsPage(ctk.CTkFrame):
         )
         title.grid(row=0, column=0, sticky="w", padx=18, pady=(14, 4))
 
-        module_status = item.get("status", C.RESULTS_STATUS_UNKNOWN)
-
-        status_badge = ctk.CTkLabel(
-            card,
-            text=f"{C.RESULTS_STATUS_PREFIX} {module_status}",
-            font=self.fonts["small_bold"],
-            corner_radius=10,
-            width=self.STATUS_BADGE_WIDTH,
-            height=self.STATUS_BADGE_HEIGHT,
-            anchor="center",
+        module_status = self._normalize_status(
+            item.get("status", C.RESULTS_STATUS_UNKNOWN)
         )
-        status_badge.grid(row=0, column=1, sticky="e", padx=18, pady=(14, 4))
 
-        self.module_status_badges.append(
-            {
-                "widget": status_badge,
-                "status": module_status,
-            }
+        badge_info = self._create_status_badge(
+            parent=card,
+            status_value=module_status,
         )
+        badge_info["widget"].grid(
+            row=0,
+            column=1,
+            sticky="e",
+            padx=18,
+            pady=(14, 4),
+        )
+        self.module_status_badges.append(badge_info)
 
         duration = ctk.CTkLabel(
             card,
-            text=f"{C.RESULTS_DURATION_PREFIX} {self._format_duration(item.get('duration_seconds', 0))}",
+            text=(
+                f"{C.RESULTS_DURATION_PREFIX} "
+                f"{self._format_duration(item.get('duration_seconds', 0))}"
+            ),
             font=self.fonts["small"],
         )
-        duration.grid(row=1, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 8))
+        duration.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            padx=18,
+            pady=(0, 8),
+        )
 
         highlights = item.get("highlights", [])
 
@@ -357,7 +384,14 @@ class ResultsPage(ctk.CTkFrame):
                 text=C.RESULTS_NO_MODULE_FINDINGS_TEXT,
                 font=self.fonts["small"],
             )
-            empty.grid(row=2, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 14))
+            empty.grid(
+                row=2,
+                column=0,
+                columnspan=2,
+                sticky="w",
+                padx=18,
+                pady=(0, 14),
+            )
             return
 
         highlights_text = " · ".join(
@@ -372,9 +406,49 @@ class ResultsPage(ctk.CTkFrame):
             wraplength=950,
             justify="left",
         )
-        body.grid(row=2, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 14))
+        body.grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            padx=18,
+            pady=(0, 14),
+        )
 
-    def _add_info_block(self, parent, row: int, column: int, title: str, value: str) -> None:
+    def _create_status_badge(self, parent, status_value: str) -> dict:
+        """
+        Creates a fixed-size status badge.
+
+        Args:
+            parent: Parent widget.
+            status_value: Status to display.
+
+        Returns:
+            dict: Badge information used later when applying the theme.
+        """
+        badge = ctk.CTkLabel(
+            parent,
+            text=f"{C.RESULTS_STATUS_PREFIX} {status_value}",
+            font=self.fonts["small_bold"],
+            corner_radius=self.STATUS_BADGE_CORNER_RADIUS,
+            width=self.STATUS_BADGE_WIDTH,
+            height=self.STATUS_BADGE_HEIGHT,
+            anchor="center",
+        )
+
+        return {
+            "widget": badge,
+            "status": status_value,
+        }
+
+    def _add_info_block(
+        self,
+        parent,
+        row: int,
+        column: int,
+        title: str,
+        value: str,
+    ) -> None:
         """
         Adds a small information block to the header card.
 
@@ -408,31 +482,38 @@ class ResultsPage(ctk.CTkFrame):
 
     def _normalize_status(self, status_value: str) -> str:
         """
-        Normalizes a module or execution status string.
+        Normalizes a raw module or execution status into a clean label.
 
         Args:
             status_value: Raw status value.
 
         Returns:
-            str: Normalized status.
+            str: Normalized status label.
         """
-        text = str(status_value or "").strip().upper()
+        if status_value is None:
+            return C.RESULTS_STATUS_UNKNOWN
 
-        if text.startswith("MODULESTATUS."):
-            text = text.split(".", 1)[1]
+        normalized = str(status_value).strip().upper()
 
-        return text
+        if "." in normalized:
+            normalized = normalized.split(".")[-1]
 
-    def _get_status_badge_colors(self, palette: dict, status_value: str) -> tuple[str, str]:
+        return normalized or C.RESULTS_STATUS_UNKNOWN
+
+    def _get_status_badge_style(
+        self,
+        palette: dict,
+        status_value: str,
+    ) -> tuple[str, str]:
         """
-        Resolves badge background and text color according to status.
+        Resolves badge colors according to the status.
 
         Args:
             palette: Active theme palette.
-            status_value: Raw or normalized status.
+            status_value: Status value.
 
         Returns:
-            tuple[str, str]: Background color and text color.
+            tuple[str, str]: background color and text color.
         """
         normalized = self._normalize_status(status_value)
 
@@ -445,10 +526,8 @@ class ResultsPage(ctk.CTkFrame):
         if normalized == "SUCCESS":
             return palette["status_success_bg"], palette["status_success_text"]
 
-        # SKIPPED vuelve al azul anterior:
-        # fondo azul "soft" y texto con el color principal como antes.
         if normalized == "SKIPPED":
-            return palette["soft"], palette["primary"]
+            return palette["status_skipped_bg"], palette["status_skipped_text"]
 
         return palette["status_unknown_bg"], palette["status_unknown_text"]
 
@@ -469,7 +548,7 @@ class ResultsPage(ctk.CTkFrame):
 
     def _format_duration(self, seconds: float | int) -> str:
         """
-        Formats a duration in seconds.
+        Formats a duration in minutes and seconds.
 
         Args:
             seconds: Duration in seconds.
@@ -478,7 +557,10 @@ class ResultsPage(ctk.CTkFrame):
             str: Human-readable duration string.
         """
         try:
-            return C.RESULTS_DURATION_FORMAT.format(seconds=float(seconds))
+            total_seconds = max(0, int(round(float(seconds))))
+            minutes = total_seconds // 60
+            remaining_seconds = total_seconds % 60
+            return f"{minutes} min {remaining_seconds} s"
         except Exception:
             return C.RESULTS_VALUE_EMPTY
 
@@ -508,7 +590,7 @@ class ResultsPage(ctk.CTkFrame):
             block.configure(fg_color="transparent")
 
         for tile in self.highlight_tiles:
-            tile.configure(fg_color=palette["soft"])
+            tile.configure(fg_color=palette["card"])
 
         for row_card in self.module_rows:
             row_card.configure(fg_color=palette["soft"])
@@ -516,7 +598,11 @@ class ResultsPage(ctk.CTkFrame):
         if self.status_badge_info:
             widget = self.status_badge_info["widget"]
             status_value = self.status_badge_info["status"]
-            bg_color, text_color = self._get_status_badge_colors(palette, status_value)
+
+            bg_color, text_color = self._get_status_badge_style(
+                palette,
+                status_value,
+            )
 
             widget.configure(
                 fg_color=bg_color,
@@ -526,7 +612,11 @@ class ResultsPage(ctk.CTkFrame):
         for badge_info in self.module_status_badges:
             widget = badge_info["widget"]
             status_value = badge_info["status"]
-            bg_color, text_color = self._get_status_badge_colors(palette, status_value)
+
+            bg_color, text_color = self._get_status_badge_style(
+                palette,
+                status_value,
+            )
 
             widget.configure(
                 fg_color=bg_color,
