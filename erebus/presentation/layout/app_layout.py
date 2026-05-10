@@ -12,6 +12,7 @@ from presentation.pages.console_page import ConsolePage
 from presentation.pages.execution_page import ExecutionPage
 from presentation.pages.placeholder_page import PlaceholderPage
 from presentation.pages.results_page import ResultsPage
+from presentation.pages.data_page import DataPage
 from presentation.theme import get_theme_palette
 
 
@@ -272,9 +273,8 @@ class AppLayout:
             on_stop=self.on_stop_execution,
         )
 
-        self.data_tab = PlaceholderPage(
+        self.data_tab = DataPage(
             parent=self.content_area,
-            text=C.PLACEHOLDER_DATA_TEXT,
             fonts=self.fonts,
         )
 
