@@ -5,12 +5,14 @@ User-facing text and status message constants for the EREBUS presentation layer.
 
 TAB_EXECUTION = "execution"
 TAB_DATA = "data"
+TAB_API_KEYS = "api_keys"
 TAB_RESULTS = "results"
 TAB_CONSOLE = "console"
 
 TAB_LABELS = {
     TAB_EXECUTION: "Execution",
     TAB_DATA: "Data",
+    TAB_API_KEYS: "API key settings",
     TAB_RESULTS: "Results",
     TAB_CONSOLE: "Console",
 }

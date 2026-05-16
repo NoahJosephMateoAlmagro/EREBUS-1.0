@@ -48,3 +48,26 @@ DATA_EMPTY_VALUE = "-"
 
 DATA_PAGE_SIZE_OPTIONS = ["25", "50", "100", "200"]
 DATA_DEFAULT_PAGE_SIZE = 100
+
+DATA_DANGER_ZONE_TITLE = "Danger zone"
+
+DATA_DANGER_ZONE_DESCRIPTION = (
+    "Clear all stored execution data from the local database. "
+    "This removes executions and collected results, but keeps saved API keys."
+)
+
+DATA_CLEAR_DATABASE_BUTTON = "Clear stored data"
+
+DATA_CLEAR_DATABASE_CONFIRM_TITLE = "Clear stored data"
+
+DATA_CLEAR_DATABASE_CONFIRM_MESSAGE = (
+    "This action will permanently delete all stored execution data.\n\n"
+    "Executions, discovered domains, emails, credentials, headers, WHOIS data, "
+    "crawler results, JavaScript results and Nmap results will be removed.\n\n"
+    "Saved API keys will NOT be deleted.\n\n"
+    "Do you want to continue?"
+)
+
+DATA_STATUS_CLEARING_DATABASE = "Clearing stored execution data..."
+DATA_STATUS_DATABASE_CLEARED = "Stored execution data cleared successfully."
+DATA_STATUS_DATABASE_CLEAR_ERROR = "Could not clear stored execution data."

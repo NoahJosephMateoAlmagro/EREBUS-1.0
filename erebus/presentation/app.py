@@ -66,6 +66,7 @@ class ErebusApp(ctk.CTk):
             on_change_ui_scale=self.change_ui_scale,
             on_start_execution=self.start_execution,
             on_stop_execution=self.stop_execution,
+            on_api_key_saved=self.show_api_key_saved_notification,
         )
         self.layout.build()
 
@@ -197,7 +198,7 @@ class ErebusApp(ctk.CTk):
         Delegates UI scale changes to the appearance controller.
 
         Args:
-            scale_name: Selected UI scale name.
+            scale_name: Selected scale name.
         """
         self.appearance.change_ui_scale(scale_name)
 
@@ -212,6 +213,25 @@ class ErebusApp(ctk.CTk):
         Delegates execution stop to the execution controller.
         """
         self.execution_controller.stop_execution()
+
+    def show_api_key_saved_notification(self, provider: str) -> None:
+        """
+        Shows a notification after an API key has been saved.
+
+        Args:
+            provider: API provider display name.
+        """
+        if self._closing or not self.winfo_exists():
+            return
+
+        if not hasattr(self, "notification_popup"):
+            return
+
+        self.notification_popup.show(
+            C.API_KEY_SAVED_POPUP.format(provider=provider),
+            closable=True,
+            play_sound=True,
+        )
 
     def on_close(self) -> None:
         """

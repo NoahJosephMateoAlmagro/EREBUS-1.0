@@ -4,6 +4,10 @@ Data browser service for the EREBUS presentation layer.
 This service provides read-only access to the SQLite database used by EREBUS.
 It is intended for the Data page, where stored results can be inspected without
 modifying the database.
+
+It also exposes one explicit cleanup operation used by the Data page danger
+zone. That operation only clears execution-related data and preserves stored API
+credentials.
 """
 
 from __future__ import annotations
@@ -15,11 +19,12 @@ from pathlib import Path
 
 class DataBrowserService:
     """
-    Read-only helper used to inspect EREBUS database tables.
+    Helper used to inspect EREBUS database tables and clear stored result data.
 
-    This service exposes paginated read operations only. The Data page should
-    never load a full table at once because large result sets can make the
-    graphical interface slow and unresponsive.
+    The browsing operations are paginated to avoid loading full tables into the
+    graphical interface. The cleanup operation deletes rows from the executions
+    table and relies on database cascade rules to remove execution-related
+    results.
     """
 
     DEFAULT_PAGE = 1
@@ -101,7 +106,7 @@ class DataBrowserService:
             ORDER BY name;
         """
 
-        with self._connect() as conn:
+        with self._connect_readonly() as conn:
             rows = conn.execute(query).fetchall()
 
         discovered_tables = [
@@ -139,7 +144,7 @@ class DataBrowserService:
 
         safe_table_name = self._quote_identifier(table_name)
 
-        with self._connect() as conn:
+        with self._connect_readonly() as conn:
             rows = conn.execute(f"PRAGMA table_info({safe_table_name})").fetchall()
 
         return [
@@ -192,7 +197,7 @@ class DataBrowserService:
         if where_sql:
             query += f" WHERE {where_sql}"
 
-        with self._connect() as conn:
+        with self._connect_readonly() as conn:
             row = conn.execute(query, params).fetchone()
 
         if not row:
@@ -275,7 +280,7 @@ class DataBrowserService:
         query += " LIMIT ? OFFSET ?"
         params.extend([safe_page_size, offset])
 
-        with self._connect() as conn:
+        with self._connect_readonly() as conn:
             rows = conn.execute(query, params).fetchall()
 
         return {
@@ -290,6 +295,24 @@ class DataBrowserService:
             "has_next": safe_page < total_pages,
             "execution_filter": execution_filter.strip(),
         }
+
+    def clear_execution_data(self) -> None:
+        """
+        Clears stored execution data while preserving API credentials.
+
+        The deletion starts from the executions table. Execution-related tables
+        are expected to use ON DELETE CASCADE foreign keys, so related rows are
+        removed automatically by SQLite when foreign keys are enabled.
+
+        API credentials are intentionally preserved.
+        """
+        if not self.database_exists():
+            return
+
+        with self._connect_write() as conn:
+            conn.execute("PRAGMA foreign_keys = ON;")
+            conn.execute("DELETE FROM executions;")
+            conn.commit()
 
     def _build_empty_page_result(
         self,
@@ -338,7 +361,7 @@ class DataBrowserService:
 
         The filter is intentionally based on execution identifiers. New EREBUS
         execution IDs are expected to include target and timestamp information,
-        for example: domain_es_2026_05_10_17_04_27.
+        for example: domain_es_20260510_170427.
 
         This means filtering by domain, date or hour works because those values
         are part of the execution ID itself.
@@ -401,17 +424,28 @@ class DataBrowserService:
 
         return ""
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect_readonly(self) -> sqlite3.Connection:
         """
         Opens a SQLite read-only connection configured for row dictionaries.
 
         Returns:
-            sqlite3.Connection: SQLite connection.
+            sqlite3.Connection: SQLite read-only connection.
         """
         conn = sqlite3.connect(
             f"file:{self.database_path}?mode=ro",
             uri=True,
         )
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _connect_write(self) -> sqlite3.Connection:
+        """
+        Opens a SQLite write connection configured for row dictionaries.
+
+        Returns:
+            sqlite3.Connection: SQLite write connection.
+        """
+        conn = sqlite3.connect(self.database_path)
         conn.row_factory = sqlite3.Row
         return conn
 

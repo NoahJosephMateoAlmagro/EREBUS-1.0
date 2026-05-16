@@ -8,11 +8,11 @@ the main window, including the header, sidebar and page container.
 import customtkinter as ctk
 
 import presentation.constants as C
+from presentation.pages.api_key_settings_page import ApiKeySettingsPage
 from presentation.pages.console_page import ConsolePage
-from presentation.pages.execution_page import ExecutionPage
-from presentation.pages.placeholder_page import PlaceholderPage
-from presentation.pages.results_page import ResultsPage
 from presentation.pages.data_page import DataPage
+from presentation.pages.execution_page import ExecutionPage
+from presentation.pages.results_page import ResultsPage
 from presentation.theme import get_theme_palette
 
 
@@ -33,6 +33,7 @@ class AppLayout:
         on_change_ui_scale,
         on_start_execution,
         on_stop_execution,
+        on_api_key_saved,
     ):
         """
         Initializes the layout builder.
@@ -45,6 +46,7 @@ class AppLayout:
             on_change_ui_scale: Callback used to change the UI scale.
             on_start_execution: Callback used to start execution.
             on_stop_execution: Callback used to stop execution.
+            on_api_key_saved: Callback executed after saving an API key.
         """
         self.parent = parent
         self.fonts = fonts
@@ -54,6 +56,7 @@ class AppLayout:
         self.on_change_ui_scale = on_change_ui_scale
         self.on_start_execution = on_start_execution
         self.on_stop_execution = on_stop_execution
+        self.on_api_key_saved = on_api_key_saved
 
         self.header = None
         self.title_container = None
@@ -68,6 +71,7 @@ class AppLayout:
 
         self.execution_tab = None
         self.data_tab = None
+        self.api_key_settings_tab = None
         self.results_tab = None
         self.console_tab = None
 
@@ -220,15 +224,21 @@ class AppLayout:
             command=lambda: self.on_show_tab(C.TAB_DATA),
         )
 
+        self.tab_buttons[C.TAB_API_KEYS] = self._create_sidebar_button(
+            text=C.TAB_LABELS[C.TAB_API_KEYS],
+            row=2,
+            command=lambda: self.on_show_tab(C.TAB_API_KEYS),
+        )
+
         self.tab_buttons[C.TAB_RESULTS] = self._create_sidebar_button(
             text=C.TAB_LABELS[C.TAB_RESULTS],
-            row=2,
+            row=3,
             command=lambda: self.on_show_tab(C.TAB_RESULTS),
         )
 
         self.tab_buttons[C.TAB_CONSOLE] = self._create_sidebar_button(
             text=C.TAB_LABELS[C.TAB_CONSOLE],
-            row=3,
+            row=4,
             command=lambda: self.on_show_tab(C.TAB_CONSOLE),
         )
 
@@ -278,6 +288,12 @@ class AppLayout:
             fonts=self.fonts,
         )
 
+        self.api_key_settings_tab = ApiKeySettingsPage(
+            parent=self.content_area,
+            fonts=self.fonts,
+            on_api_key_saved=self.on_api_key_saved,
+        )
+
         self.results_tab = ResultsPage(
             parent=self.content_area,
             fonts=self.fonts,
@@ -291,6 +307,7 @@ class AppLayout:
         self.pages = {
             C.TAB_EXECUTION: self.execution_tab,
             C.TAB_DATA: self.data_tab,
+            C.TAB_API_KEYS: self.api_key_settings_tab,
             C.TAB_RESULTS: self.results_tab,
             C.TAB_CONSOLE: self.console_tab,
         }

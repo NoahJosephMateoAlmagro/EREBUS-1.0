@@ -7,11 +7,15 @@ pagination controls and a read-only tabular view of the selected table.
 
 The table rendering itself is delegated to DataTableView. This page acts as a
 coordinator between the database browser service and the visual table widget.
+
+A danger zone is displayed at the bottom of the page to clear stored execution
+data while preserving saved API credentials.
 """
 
 from __future__ import annotations
 
 import sys
+from tkinter import messagebox
 
 import customtkinter as ctk
 
@@ -53,6 +57,7 @@ class DataPage(ctk.CTkFrame):
         self.header_card = None
         self.table_tabs_card = None
         self.table_card = None
+        self.danger_zone_card = None
 
         self.description_textbox = None
         self.execution_filter_entry = None
@@ -69,6 +74,9 @@ class DataPage(ctk.CTkFrame):
         self.next_button = None
         self.page_size_menu = None
         self.pagination_label = None
+
+        self.danger_description_label = None
+        self.clear_database_button = None
 
         self._build()
 
@@ -95,6 +103,7 @@ class DataPage(ctk.CTkFrame):
         self._build_header_card()
         self._build_table_tabs_card()
         self._build_table_card()
+        self._build_danger_zone_card()
 
         self.refresh_tables()
 
@@ -370,6 +379,59 @@ class DataPage(ctk.CTkFrame):
             pady=(0, 24),
         )
 
+    def _build_danger_zone_card(self) -> None:
+        """
+        Builds the danger zone card used to clear stored execution data.
+        """
+        self.danger_zone_card = create_card(self.data_scroll, row=3)
+        self.danger_zone_card.grid_columnconfigure(0, weight=1)
+
+        title = ctk.CTkLabel(
+            self.danger_zone_card,
+            text=C.DATA_DANGER_ZONE_TITLE,
+            font=self.fonts["section"],
+        )
+        title.grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=24,
+            pady=(22, 8),
+        )
+
+        self.danger_description_label = ctk.CTkLabel(
+            self.danger_zone_card,
+            text=C.DATA_DANGER_ZONE_DESCRIPTION,
+            font=self.fonts["body"],
+            justify="left",
+            anchor="w",
+            wraplength=980,
+        )
+        self.danger_description_label.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=24,
+            pady=(0, 16),
+        )
+
+        self.clear_database_button = ctk.CTkButton(
+            self.danger_zone_card,
+            text=C.DATA_CLEAR_DATABASE_BUTTON,
+            width=190,
+            height=42,
+            corner_radius=6,
+            font=self.fonts["button"],
+            command=self.clear_database_with_confirmation,
+        )
+        self.clear_database_button.grid(
+            row=2,
+            column=0,
+            sticky="w",
+            padx=24,
+            pady=(0, 22),
+        )
+
     def refresh_tables(self) -> None:
         """
         Reloads available database tables and rebuilds the internal table tabs.
@@ -563,6 +625,40 @@ class DataPage(ctk.CTkFrame):
 
         self.current_page = 1
         self.reload_current_table(reset_page=True)
+
+    def clear_database_with_confirmation(self) -> None:
+        """
+        Asks for confirmation and clears stored execution data if confirmed.
+        """
+        confirmed = messagebox.askyesno(
+            C.DATA_CLEAR_DATABASE_CONFIRM_TITLE,
+            C.DATA_CLEAR_DATABASE_CONFIRM_MESSAGE,
+            parent=self.winfo_toplevel(),
+        )
+
+        if not confirmed:
+            return
+
+        self.clear_database()
+
+    def clear_database(self) -> None:
+        """
+        Clears stored execution data and refreshes the Data page.
+        """
+        self._set_status(C.DATA_STATUS_CLEARING_DATABASE)
+
+        try:
+            self.database_service.clear_execution_data()
+
+            self.current_page = 1
+            self.current_page_data = None
+
+            self.refresh_tables()
+            self._set_status(C.DATA_STATUS_DATABASE_CLEARED)
+
+        except Exception as exc:
+            self._set_status(C.DATA_STATUS_DATABASE_CLEAR_ERROR)
+            print(f"[GUI] Data page clear database error: {exc}", file=sys.stderr)
 
     def _update_status_from_page(self, page_data: dict) -> None:
         """
@@ -813,6 +909,7 @@ class DataPage(ctk.CTkFrame):
             self.header_card,
             self.table_tabs_card,
             self.table_card,
+            self.danger_zone_card,
         ]:
             if card:
                 card.configure(fg_color=palette["card"])
@@ -876,5 +973,15 @@ class DataPage(ctk.CTkFrame):
 
         if self.table_view:
             self.table_view.apply_theme(palette)
+
+        if self.danger_description_label:
+            self.danger_description_label.configure(text_color=palette["muted"])
+
+        if self.clear_database_button:
+            self.clear_database_button.configure(
+                fg_color=palette["danger"],
+                hover_color=palette["danger_hover"],
+                text_color=C.COLORS["text_light"],
+            )
 
         self._sync_table_buttons()

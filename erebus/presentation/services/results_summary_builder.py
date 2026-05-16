@@ -59,7 +59,7 @@ class ResultsSummaryBuilder:
                         "title",
                         module.module_name,
                     ),
-                    "status": str(module.status).replace("ModuleStatus.", ""),
+                    "status": self._normalize_status(module.status),
                     "duration_seconds": module.duration_seconds or 0,
                     "highlights": self._extract_module_highlights(metrics),
                 }
@@ -195,6 +195,24 @@ class ResultsSummaryBuilder:
         """
         Infers the final execution status from the module responses.
 
+        Rules:
+            SUCCESS:
+                Every executed module finished successfully.
+
+            PARTIAL:
+                At least one module failed or ended partially, but at least one
+                executed module completed successfully.
+
+            FAILED:
+                Every executed module failed, or there are no successful module
+                results at all and at least one module failed.
+
+            SKIPPED:
+                Every module was skipped.
+
+            UNKNOWN:
+                Modules exist, but their statuses cannot be interpreted.
+
         Args:
             modules: Module responses.
 
@@ -204,18 +222,57 @@ class ResultsSummaryBuilder:
         if not modules:
             return C.RESULTS_NO_RESULTS
 
-        statuses = {
-            str(module.status).replace("ModuleStatus.", "")
+        statuses = [
+            self._normalize_status(module.status)
             for module in modules
-        }
+        ]
 
-        if "FAILED" in statuses:
-            return "FAILED"
+        statuses = [
+            status
+            for status in statuses
+            if status
+        ]
 
-        if "PARTIAL" in statuses:
-            return "PARTIAL"
+        if not statuses:
+            return "UNKNOWN"
 
-        if "SKIPPED" in statuses and len(statuses) == 1:
+        skipped_count = statuses.count("SKIPPED")
+        success_count = statuses.count("SUCCESS")
+        partial_count = statuses.count("PARTIAL")
+        failed_count = statuses.count("FAILED")
+
+        executable_count = len(statuses) - skipped_count
+
+        if executable_count <= 0:
             return "SKIPPED"
 
-        return "SUCCESS"
+        if failed_count == executable_count:
+            return "FAILED"
+
+        if failed_count > 0 or partial_count > 0:
+            return "PARTIAL"
+
+        if success_count == executable_count:
+            return "SUCCESS"
+
+        return "PARTIAL"
+
+    def _normalize_status(self, status) -> str:
+        """
+        Normalizes a raw module status into a clean uppercase label.
+
+        Args:
+            status: Raw status value. It can be an enum, string or None.
+
+        Returns:
+            str: Normalized status label.
+        """
+        if status is None:
+            return "UNKNOWN"
+
+        normalized = str(status).strip().upper()
+
+        if "." in normalized:
+            normalized = normalized.split(".")[-1]
+
+        return normalized or "UNKNOWN"
