@@ -7,7 +7,8 @@ analysis run.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import shared.constants as C
 from shared.utils import build_execution_id
@@ -19,7 +20,13 @@ class Execution:
     Represents a single execution of the EREBUS engine.
 
     Stores execution metadata including target, timestamps and status.
+
+    The execution uses Europe/Madrid local time because execution identifiers
+    and stored timestamps are shown directly to the user in the graphical
+    interface.
     """
+
+    APP_TIMEZONE = ZoneInfo("Europe/Madrid")
 
     def __init__(self, target: str):
         """
@@ -29,7 +36,7 @@ class Execution:
             target: Target domain or host used for the execution.
         """
         self.TARGET = target
-        self.START = datetime.now(timezone.utc)
+        self.START = self._now()
         self.ID = build_execution_id(target, self.START)
         self.END = None
         self.STATUS = C.EXECUTION_STATUS_RUNNING
@@ -38,14 +45,14 @@ class Execution:
         """
         Marks the execution as successfully finished.
         """
-        self.END = datetime.now(timezone.utc)
+        self.END = self._now()
         self.STATUS = C.EXECUTION_STATUS_FINISHED
 
     def fail(self):
         """
         Marks the execution as failed.
         """
-        self.END = datetime.now(timezone.utc)
+        self.END = self._now()
         self.STATUS = C.EXECUTION_STATUS_ERROR
 
     @property
@@ -57,6 +64,15 @@ class Execution:
             return None
 
         return (self.END - self.START).total_seconds()
+
+    def _now(self) -> datetime:
+        """
+        Gets the current execution datetime using the application timezone.
+
+        Returns:
+            datetime: Timezone-aware datetime in Europe/Madrid.
+        """
+        return datetime.now(self.APP_TIMEZONE)
 
     def _build_execution_id(self, target: str, start_time: datetime) -> str:
         """

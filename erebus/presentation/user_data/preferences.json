@@ -25,17 +25,17 @@
         "timezone": "Europe/Madrid"
       },
       "modules": {
-        "crawling": true,
-        "dns": true,
-        "email_passive": true,
-        "file_parsing": true,
-        "http_headers": true,
-        "js_parsing": true,
-        "nmap": true,
-        "scraping": true,
-        "shodan": true,
+        "crawling": false,
+        "dns": false,
+        "email_passive": false,
+        "file_parsing": false,
+        "http_headers": false,
+        "js_parsing": false,
+        "nmap": false,
+        "scraping": false,
+        "shodan": false,
         "subdomains": true,
-        "wayback": true,
+        "wayback": false,
         "whois": true
       },
       "retries": {
@@ -61,6 +61,6 @@
         "nmap_path": "C:\\\\Program Files (x86)\\\\Nmap\\\\nmap.exe"
       }
     },
-    "target": "urjc.es"
+    "target": "google.com"
   }
 }

@@ -10,6 +10,10 @@ coordinator between the database browser service and the visual table widget.
 
 A danger zone is displayed at the bottom of the page to clear stored execution
 data while preserving saved API credentials.
+
+The page also provides an Excel export action. The export respects the active
+execution filter and writes the visible database tables to a workbook with one
+worksheet per table.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import customtkinter as ctk
 
 import presentation.constants as C
 from presentation.services.data_browser_service import DataBrowserService
+from presentation.services.data_export_service import DataExportService
 from presentation.widgets.cards import create_card
 from presentation.widgets.data_table_view import DataTableView
 
@@ -44,6 +49,7 @@ class DataPage(ctk.CTkFrame):
 
         self.fonts = fonts
         self.database_service = DataBrowserService()
+        self.data_export_service = DataExportService(self.database_service)
 
         self.current_palette = None
         self.current_table = None
@@ -62,6 +68,7 @@ class DataPage(ctk.CTkFrame):
         self.description_textbox = None
         self.execution_filter_entry = None
         self.refresh_button = None
+        self.export_excel_button = None
         self.filter_help_textbox = None
         self.status_label = None
 
@@ -105,6 +112,17 @@ class DataPage(ctk.CTkFrame):
         self._build_table_card()
         self._build_danger_zone_card()
 
+        self.refresh_tables()
+
+    def on_show(self) -> None:
+        """
+        Refreshes the Data page when the tab becomes visible.
+
+        This method is called by the navigation controller after showing the
+        Data tab. It reloads the available database tables and the visible
+        content so new execution results appear without requiring the user to
+        press the Refresh button manually.
+        """
         self.refresh_tables()
 
     def _build_header_card(self) -> None:
@@ -159,6 +177,7 @@ class DataPage(ctk.CTkFrame):
         filter_frame.grid_columnconfigure(0, weight=0)
         filter_frame.grid_columnconfigure(1, weight=1)
         filter_frame.grid_columnconfigure(2, weight=0)
+        filter_frame.grid_columnconfigure(3, weight=0)
 
         label = ctk.CTkLabel(
             filter_frame,
@@ -202,6 +221,22 @@ class DataPage(ctk.CTkFrame):
             row=0,
             column=2,
             sticky="e",
+        )
+
+        self.export_excel_button = ctk.CTkButton(
+            filter_frame,
+            text=C.DATA_EXPORT_EXCEL_BUTTON,
+            width=150,
+            height=42,
+            corner_radius=6,
+            font=self.fonts["button"],
+            command=self.export_filtered_data_to_excel,
+        )
+        self.export_excel_button.grid(
+            row=0,
+            column=3,
+            sticky="e",
+            padx=(10, 0),
         )
 
         self.filter_help_textbox = ctk.CTkTextbox(
@@ -660,6 +695,58 @@ class DataPage(ctk.CTkFrame):
             self._set_status(C.DATA_STATUS_DATABASE_CLEAR_ERROR)
             print(f"[GUI] Data page clear database error: {exc}", file=sys.stderr)
 
+    def export_filtered_data_to_excel(self) -> None:
+        """
+        Exports visible database tables to an Excel workbook.
+
+        The active execution filter is respected. Therefore, if the user has typed
+        a domain, date, time or full execution identifier in the Data page filter,
+        the generated Excel file will contain only the matching rows.
+        """
+        execution_filter = self._get_execution_filter()
+        self._set_status(C.DATA_STATUS_EXPORTING_EXCEL)
+
+        try:
+            metadata = self.data_export_service.export_filtered_database_to_excel(
+                execution_filter=execution_filter,
+                parent=self.winfo_toplevel(),
+            )
+
+            if metadata is None:
+                self._set_status(C.DATA_STATUS_EXPORT_EXCEL_CANCELLED)
+                return
+
+            table_count = metadata.get("table_count", 0)
+            row_count = metadata.get("row_count", 0)
+            output_path = metadata.get("output_path", "")
+
+            self._set_status(
+                C.DATA_STATUS_EXPORT_EXCEL_SUCCESS.format(
+                    tables=table_count,
+                    rows=row_count,
+                )
+            )
+
+            messagebox.showinfo(
+                C.DATA_EXPORT_EXCEL_SUCCESS_TITLE,
+                C.DATA_EXPORT_EXCEL_SUCCESS_MESSAGE.format(
+                    tables=table_count,
+                    rows=row_count,
+                    path=output_path,
+                ),
+                parent=self.winfo_toplevel(),
+            )
+
+        except Exception as exc:
+            self._set_status(C.DATA_STATUS_EXPORT_EXCEL_ERROR)
+            print(f"[GUI] Data Excel export error: {exc}", file=sys.stderr)
+
+            messagebox.showerror(
+                C.DATA_EXPORT_EXCEL_ERROR_TITLE,
+                C.DATA_EXPORT_EXCEL_ERROR_MESSAGE.format(error=str(exc)),
+                parent=self.winfo_toplevel(),
+            )
+
     def _update_status_from_page(self, page_data: dict) -> None:
         """
         Updates the status text after loading a page.
@@ -941,6 +1028,13 @@ class DataPage(ctk.CTkFrame):
                 fg_color=palette["primary"],
                 hover_color=palette["primary_hover"],
                 text_color=palette["inverse_text"],
+            )
+
+        if self.export_excel_button:
+            self.export_excel_button.configure(
+                fg_color=palette["secondary"],
+                hover_color=palette["secondary_hover"],
+                text_color=palette["text"],
             )
 
         if self.status_label:

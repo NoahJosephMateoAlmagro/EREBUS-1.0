@@ -71,3 +71,26 @@ DATA_CLEAR_DATABASE_CONFIRM_MESSAGE = (
 DATA_STATUS_CLEARING_DATABASE = "Clearing stored execution data..."
 DATA_STATUS_DATABASE_CLEARED = "Stored execution data cleared successfully."
 DATA_STATUS_DATABASE_CLEAR_ERROR = "Could not clear stored execution data."
+
+DATA_EXPORT_EXCEL_BUTTON = "Export Excel"
+
+DATA_STATUS_EXPORTING_EXCEL = "Exporting filtered data to Excel..."
+DATA_STATUS_EXPORT_EXCEL_CANCELLED = "Excel export cancelled."
+DATA_STATUS_EXPORT_EXCEL_SUCCESS = (
+    "Excel export completed: {tables} tables and {rows} rows exported."
+)
+DATA_STATUS_EXPORT_EXCEL_ERROR = "Could not export filtered data to Excel."
+
+DATA_EXPORT_EXCEL_SUCCESS_TITLE = "Excel export completed"
+DATA_EXPORT_EXCEL_SUCCESS_MESSAGE = (
+    "Filtered data was exported successfully.\n\n"
+    "Tables exported: {tables}\n"
+    "Rows exported: {rows}\n\n"
+    "File:\n{path}"
+)
+
+DATA_EXPORT_EXCEL_ERROR_TITLE = "Excel export error"
+DATA_EXPORT_EXCEL_ERROR_MESSAGE = (
+    "The filtered data could not be exported to Excel.\n\n"
+    "{error}"
+)
