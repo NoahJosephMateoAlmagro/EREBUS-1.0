@@ -2,7 +2,7 @@
   "execution_form": {
     "config_overrides": {
       "debug": {
-        "clear_db_on_run": true
+        "clear_db_on_run": false
       },
       "limits": {
         "cdx_url_limit": 200,

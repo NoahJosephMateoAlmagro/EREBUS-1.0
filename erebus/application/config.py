@@ -3,7 +3,7 @@ APP_CONFIG = {
         "nmap_path": r"C:\\Program Files (x86)\\Nmap\\nmap.exe"
     },
     "debug": {
-        "clear_db_on_run": True
+        "clear_db_on_run": False
     },
     "logging": {
         "timezone": "Europe/Madrid",

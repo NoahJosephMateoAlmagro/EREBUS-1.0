@@ -1,24 +1,40 @@
+from datetime import datetime, timezone
+import re
 from typing import Any
 from urllib.parse import urlparse
+
 import shared.constants as C
 
+
 def list_to_str(value: Any) -> str | None:
+    """
+    Converts a list value into a comma-separated string.
+
+    Args:
+        value: Value to convert.
+
+    Returns:
+        str | None: Converted string, original string representation or None.
+    """
     if value is None:
         return None
+
     if isinstance(value, list):
         return ", ".join(str(v) for v in value)
+
     return str(value)
+
 
 def is_external(url: str, base_domain: str) -> bool:
     """
     Determines whether a URL is external to the target domain.
 
     Args:
-        url (str): URL to inspect
-        base_domain (str): Target domain
+        url: URL to inspect.
+        base_domain: Target domain.
 
     Returns:
-        bool: True if external, False otherwise
+        bool: True if external, False otherwise.
     """
     netloc = urlparse(url).netloc.lower().split(":")[0]
     base_domain = base_domain.lower().split(":")[0]
@@ -28,37 +44,61 @@ def is_external(url: str, base_domain: str) -> bool:
         or netloc.endswith("." + base_domain)
     )
 
+
 def first_or_value(value: Any) -> Any:
     """
-    Returns the first element if value is a list, otherwise returns value.
+    Returns the first element if value is a list, otherwise returns the value.
+
+    Args:
+        value: Value to inspect.
+
+    Returns:
+        Any: First list element or original value.
     """
     if isinstance(value, list):
         return value[0] if value else None
+
     return value
+
 
 def ensure_list(value: Any) -> list[Any]:
     """
     Ensures the value is always returned as a list.
+
+    Args:
+        value: Value to normalize.
+
+    Returns:
+        list[Any]: Normalized list.
     """
     if not value:
         return []
+
     return value if isinstance(value, list) else [value]
+
 
 def normalize_URL(url: str) -> str:
     """
     Normalizes URLs by removing fragments and trailing slashes.
+
+    Args:
+        url: URL to normalize.
+
+    Returns:
+        str: Normalized URL.
     """
     return url.split("#")[0].rstrip("/")
+
 
 def build_base_urls(domain: str) -> list[str]:
     """
     Builds the default base URLs for a target domain.
 
     Args:
-        domain (str): Target domain
+        domain: Target domain.
 
     Returns:
-        list[str]: Default base URLs
+        list[str]: Default base URLs.
     """
     return [
         f"https://{domain}",
@@ -67,15 +107,17 @@ def build_base_urls(domain: str) -> list[str]:
         f"http://www.{domain}",
     ]
 
+
 def is_valid_html_url(url: str) -> bool:
     """
-    Determines whether a URL is a valid HTTP(S) candidate and not a filtered asset type.
+    Determines whether a URL is a valid HTTP(S) candidate and not a filtered
+    asset type.
 
     Args:
-        url (str): Original URL to validate
+        url: Original URL to validate.
 
     Returns:
-        bool: True if the URL is accepted, False otherwise
+        bool: True if the URL is accepted, False otherwise.
     """
     parsed = urlparse(url)
 
@@ -88,17 +130,17 @@ def is_valid_html_url(url: str) -> bool:
 
     return True
 
-def validate_and_normalize_domain(value: str) -> str | None:
 
+def validate_and_normalize_domain(value: str) -> str | None:
     """
     Validates and normalizes a domain string.
+
     Args:
-        value (str): Input domain candidate
+        value: Input domain candidate.
 
     Returns:
-        str | None: Normalized domain if valid, otherwise None
+        str | None: Normalized domain if valid, otherwise None.
     """
-
     if not value:
         return None
 
@@ -125,3 +167,53 @@ def validate_and_normalize_domain(value: str) -> str | None:
         return None
 
     return value
+
+
+def build_execution_id(target: str, started_at: datetime | None = None) -> str:
+    """
+    Builds a readable and stable execution identifier.
+
+    The identifier uses the normalized target and the execution start timestamp.
+
+    Example:
+        urjc_es_20260510_184233_527
+
+    Args:
+        target: Target domain or URL analyzed by EREBUS.
+        started_at: Execution start datetime. If omitted, current UTC time is used.
+
+    Returns:
+        str: Readable execution identifier.
+    """
+    if started_at is None:
+        started_at = datetime.now(timezone.utc)
+
+    normalized_target = normalize_execution_id_target(target)
+
+    timestamp = started_at.strftime("%Y%m%d_%H%M%S")
+    milliseconds = f"{started_at.microsecond // 1000:03d}"
+
+    return f"{normalized_target}_{timestamp}_{milliseconds}"
+
+
+def normalize_execution_id_target(target: str) -> str:
+    """
+    Normalizes a target value so it can be safely used inside an execution id.
+
+    Args:
+        target: Raw target domain or URL.
+
+    Returns:
+        str: Normalized target value.
+    """
+    value = str(target or "").strip().lower()
+
+    value = value.replace("https://", "")
+    value = value.replace("http://", "")
+    value = value.split("/", 1)[0]
+    value = value.split(":", 1)[0]
+
+    value = re.sub(r"[^a-z0-9]+", "_", value)
+    value = value.strip("_")
+
+    return value or "unknown_target"
