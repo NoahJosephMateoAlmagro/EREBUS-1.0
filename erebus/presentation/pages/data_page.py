@@ -2,17 +2,23 @@
 Data page for the EREBUS graphical interface.
 
 This page allows the user to inspect the information stored in the SQLite
-database. It provides an internal table selector, a domain filter and a
-read-only tabular view of the selected table.
+database. It provides an internal table selector, an execution identifier filter,
+pagination controls and a read-only tabular view of the selected table.
+
+The table rendering itself is delegated to DataTableView. This page acts as a
+coordinator between the database browser service and the visual table widget.
 """
 
 from __future__ import annotations
+
+import sys
 
 import customtkinter as ctk
 
 import presentation.constants as C
 from presentation.services.data_browser_service import DataBrowserService
 from presentation.widgets.cards import create_card
+from presentation.widgets.data_table_view import DataTableView
 
 
 class DataPage(ctk.CTkFrame):
@@ -20,7 +26,7 @@ class DataPage(ctk.CTkFrame):
     Page used to browse stored EREBUS database information.
     """
 
-    MAX_CELL_LENGTH = 120
+    LOADING_DELAY_MS = 80
 
     def __init__(self, parent, fonts):
         """
@@ -37,6 +43,11 @@ class DataPage(ctk.CTkFrame):
 
         self.current_palette = None
         self.current_table = None
+        self.current_page = 1
+        self.current_page_size = C.DATA_DEFAULT_PAGE_SIZE
+        self.current_page_data = None
+
+        self.pending_load_id = None
 
         self.data_scroll = None
         self.header_card = None
@@ -44,13 +55,20 @@ class DataPage(ctk.CTkFrame):
         self.table_card = None
 
         self.description_textbox = None
-        self.domain_entry = None
+        self.execution_filter_entry = None
         self.refresh_button = None
+        self.filter_help_textbox = None
         self.status_label = None
 
-        self.table_buttons = {}
         self.table_container = None
-        self.rows_container = None
+        self.table_buttons = {}
+
+        self.table_view = None
+        self.pagination_frame = None
+        self.previous_button = None
+        self.next_button = None
+        self.page_size_menu = None
+        self.pagination_label = None
 
         self._build()
 
@@ -65,7 +83,13 @@ class DataPage(ctk.CTkFrame):
             self,
             corner_radius=0,
         )
-        self.data_scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.data_scroll.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=10,
+            pady=10,
+        )
         self.data_scroll.grid_columnconfigure(0, weight=1)
 
         self._build_header_card()
@@ -108,9 +132,9 @@ class DataPage(ctk.CTkFrame):
             column=0,
             sticky="ew",
             padx=24,
-            pady=(0, 18),
+            pady=(0, 14),
         )
-        self._set_description_text(C.DATA_DESCRIPTION)
+        self._set_textbox_text(self.description_textbox, C.DATA_DESCRIPTION)
 
         filter_frame = ctk.CTkFrame(
             self.header_card,
@@ -121,7 +145,7 @@ class DataPage(ctk.CTkFrame):
             column=0,
             sticky="ew",
             padx=24,
-            pady=(0, 22),
+            pady=(0, 8),
         )
         filter_frame.grid_columnconfigure(0, weight=0)
         filter_frame.grid_columnconfigure(1, weight=1)
@@ -129,7 +153,7 @@ class DataPage(ctk.CTkFrame):
 
         label = ctk.CTkLabel(
             filter_frame,
-            text=C.DATA_DOMAIN_FILTER_LABEL,
+            text=C.DATA_EXECUTION_FILTER_LABEL,
             font=self.fonts["body_bold"],
         )
         label.grid(
@@ -139,21 +163,21 @@ class DataPage(ctk.CTkFrame):
             padx=(0, 14),
         )
 
-        self.domain_entry = ctk.CTkEntry(
+        self.execution_filter_entry = ctk.CTkEntry(
             filter_frame,
-            placeholder_text="example.com",
+            placeholder_text=C.DATA_EXECUTION_FILTER_PLACEHOLDER,
             height=42,
             font=self.fonts["body"],
         )
-        self.domain_entry.grid(
+        self.execution_filter_entry.grid(
             row=0,
             column=1,
             sticky="ew",
             padx=(0, 14),
         )
-        self.domain_entry.bind(
+        self.execution_filter_entry.bind(
             "<Return>",
-            lambda _event: self.reload_current_table(),
+            lambda _event: self.reload_current_table(reset_page=True),
         )
 
         self.refresh_button = ctk.CTkButton(
@@ -163,12 +187,33 @@ class DataPage(ctk.CTkFrame):
             height=42,
             corner_radius=6,
             font=self.fonts["button"],
-            command=self.reload_current_table,
+            command=lambda: self.reload_current_table(reset_page=True),
         )
         self.refresh_button.grid(
             row=0,
             column=2,
             sticky="e",
+        )
+
+        self.filter_help_textbox = ctk.CTkTextbox(
+            self.header_card,
+            height=self._get_help_text_height(),
+            font=self.fonts["small"],
+            wrap="word",
+            corner_radius=0,
+            border_width=0,
+            activate_scrollbars=False,
+        )
+        self.filter_help_textbox.grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            padx=24,
+            pady=(0, 16),
+        )
+        self._set_textbox_text(
+            self.filter_help_textbox,
+            self._get_filter_help_text(),
         )
 
         self.status_label = ctk.CTkLabel(
@@ -177,72 +222,16 @@ class DataPage(ctk.CTkFrame):
             font=self.fonts["small_bold"],
         )
         self.status_label.grid(
-            row=3,
+            row=4,
             column=0,
             sticky="w",
             padx=24,
             pady=(0, 18),
         )
 
-    def _set_description_text(self, text: str) -> None:
-        """
-        Writes the description text into the read-only description textbox.
-
-        Args:
-            text: Description text.
-        """
-        if not self.description_textbox:
-            return
-
-        self.description_textbox.configure(state="normal")
-        self.description_textbox.delete("1.0", "end")
-        self.description_textbox.insert("1.0", text)
-        self.description_textbox.configure(state="disabled")
-
-    def _get_description_height(self) -> int:
-        """
-        Calculates a safe description textbox height for the current body font.
-
-        Returns:
-            int: Textbox height in pixels.
-        """
-        try:
-            font_size = abs(int(self.fonts["body"].cget("size")))
-        except Exception:
-            font_size = 14
-
-        return max(54, int(font_size * 4.4))
-
-    def _configure_description_textbox(self, palette: dict) -> None:
-        """
-        Applies theme and size settings to the description textbox.
-
-        Args:
-            palette: Active theme palette.
-        """
-        if not self.description_textbox:
-            return
-
-        self.description_textbox.configure(
-            height=self._get_description_height(),
-            fg_color=palette["card"],
-            text_color=palette["text"],
-            border_width=0,
-        )
-
-        try:
-            self.description_textbox._textbox.configure(
-                padx=0,
-                pady=0,
-                borderwidth=0,
-                highlightthickness=0,
-            )
-        except AttributeError:
-            pass
-
     def _build_table_tabs_card(self) -> None:
         """
-        Builds the internal table selector card.
+        Builds the internal database table selector card.
         """
         self.table_tabs_card = create_card(self.data_scroll, row=1)
         self.table_tabs_card.grid_columnconfigure(0, weight=1)
@@ -274,27 +263,116 @@ class DataPage(ctk.CTkFrame):
 
     def _build_table_card(self) -> None:
         """
-        Builds the table content card.
+        Builds the table card with pagination controls and table widget.
         """
         self.table_card = create_card(self.data_scroll, row=2)
         self.table_card.grid_columnconfigure(0, weight=1)
 
-        self.rows_container = ctk.CTkFrame(
+        self.pagination_frame = ctk.CTkFrame(
             self.table_card,
             fg_color="transparent",
         )
-        self.rows_container.grid(
+        self.pagination_frame.grid(
             row=0,
             column=0,
             sticky="ew",
             padx=24,
-            pady=24,
+            pady=(22, 12),
         )
-        self.rows_container.grid_columnconfigure(0, weight=1)
+        self.pagination_frame.grid_columnconfigure(0, weight=0)
+        self.pagination_frame.grid_columnconfigure(1, weight=0)
+        self.pagination_frame.grid_columnconfigure(2, weight=1)
+        self.pagination_frame.grid_columnconfigure(3, weight=0)
+        self.pagination_frame.grid_columnconfigure(4, weight=0)
+
+        self.previous_button = ctk.CTkButton(
+            self.pagination_frame,
+            text="Previous",
+            width=120,
+            height=38,
+            corner_radius=6,
+            font=self.fonts["button"],
+            command=self.go_to_previous_page,
+        )
+        self.previous_button.grid(
+            row=0,
+            column=0,
+            sticky="w",
+            padx=(0, 10),
+        )
+
+        self.next_button = ctk.CTkButton(
+            self.pagination_frame,
+            text="Next",
+            width=120,
+            height=38,
+            corner_radius=6,
+            font=self.fonts["button"],
+            command=self.go_to_next_page,
+        )
+        self.next_button.grid(
+            row=0,
+            column=1,
+            sticky="w",
+            padx=(0, 16),
+        )
+
+        self.pagination_label = ctk.CTkLabel(
+            self.pagination_frame,
+            text="Page - / - · 0 rows",
+            font=self.fonts["small_bold"],
+            justify="left",
+        )
+        self.pagination_label.grid(
+            row=0,
+            column=2,
+            sticky="w",
+        )
+
+        page_size_label = ctk.CTkLabel(
+            self.pagination_frame,
+            text="Rows",
+            font=self.fonts["small_bold"],
+        )
+        page_size_label.grid(
+            row=0,
+            column=3,
+            sticky="e",
+            padx=(16, 8),
+        )
+
+        self.page_size_menu = ctk.CTkOptionMenu(
+            self.pagination_frame,
+            values=C.DATA_PAGE_SIZE_OPTIONS,
+            width=92,
+            height=38,
+            corner_radius=6,
+            font=self.fonts["small_bold"],
+            dropdown_font=self.fonts["small"],
+            command=self.change_page_size,
+        )
+        self.page_size_menu.set(str(self.current_page_size))
+        self.page_size_menu.grid(
+            row=0,
+            column=4,
+            sticky="e",
+        )
+
+        self.table_view = DataTableView(
+            parent=self.table_card,
+            fonts=self.fonts,
+        )
+        self.table_view.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            padx=24,
+            pady=(0, 24),
+        )
 
     def refresh_tables(self) -> None:
         """
-        Reloads available database tables and rebuilds the internal tabs.
+        Reloads available database tables and rebuilds the internal table tabs.
         """
         for child in self.table_container.winfo_children():
             child.destroy()
@@ -305,8 +383,13 @@ class DataPage(ctk.CTkFrame):
 
         if not table_names:
             self.current_table = None
+            self.current_page_data = None
             self._set_status(C.DATA_STATUS_NO_DATABASE)
-            self._render_message(C.DATA_NO_DATABASE_TEXT)
+            self._update_pagination_controls(None)
+
+            if self.table_view:
+                self.table_view.render_message(C.DATA_NO_DATABASE_TEXT)
+
             return
 
         for index, table_name in enumerate(table_names):
@@ -333,178 +416,342 @@ class DataPage(ctk.CTkFrame):
 
     def select_table(self, table_name: str) -> None:
         """
-        Selects one database table and renders its rows.
+        Selects a database table and loads its first page.
 
         Args:
             table_name: Selected database table.
         """
         self.current_table = table_name
+        self.current_page = 1
+        self.current_page_data = None
         self._sync_table_buttons()
-        self.reload_current_table()
+        self.reload_current_table(reset_page=True)
 
-    def reload_current_table(self) -> None:
+    def reload_current_table(self, reset_page: bool = False) -> None:
         """
-        Reloads the currently selected table using the active domain filter.
+        Reloads the currently selected table.
+
+        Args:
+            reset_page: Whether to reset pagination to the first page.
         """
         if not self.current_table:
-            self._render_message(C.DATA_NO_TABLE_SELECTED_TEXT)
+            self._set_status(C.DATA_NO_TABLE_SELECTED_TEXT)
+
+            if self.table_view:
+                self.table_view.render_message(C.DATA_NO_TABLE_SELECTED_TEXT)
+
             return
 
-        domain_filter = self.domain_entry.get().strip() if self.domain_entry else ""
+        if reset_page:
+            self.current_page = 1
 
-        columns, rows = self.database_service.fetch_table_rows(
-            table_name=self.current_table,
-            domain_filter=domain_filter,
+        if self.pending_load_id:
+            try:
+                self.after_cancel(self.pending_load_id)
+            except Exception:
+                pass
+            self.pending_load_id = None
+
+        table_name = self.current_table
+        execution_filter = self._get_execution_filter()
+
+        self._set_status(C.DATA_STATUS_LOADING.format(table=table_name))
+        self._update_pagination_controls(None)
+
+        if self.table_view:
+            self.table_view.show_loading(table_name)
+
+        self.pending_load_id = self.after(
+            self.LOADING_DELAY_MS,
+            lambda: self._load_table_page(
+                table_name=table_name,
+                execution_filter=execution_filter,
+                page=self.current_page,
+                page_size=self.current_page_size,
+            ),
         )
 
-        if not columns:
-            self._set_status(C.DATA_STATUS_NO_COLUMNS)
-            self._render_message(C.DATA_NO_COLUMNS_TEXT)
+    def _load_table_page(
+        self,
+        table_name: str,
+        execution_filter: str,
+        page: int,
+        page_size: int,
+    ) -> None:
+        """
+        Loads a paginated table page and renders it.
+
+        Args:
+            table_name: Database table name.
+            execution_filter: Active execution identifier filter.
+            page: Requested page number.
+            page_size: Requested page size.
+        """
+        self.pending_load_id = None
+
+        try:
+            page_data = self.database_service.fetch_table_page(
+                table_name=table_name,
+                execution_filter=execution_filter,
+                page=page,
+                page_size=page_size,
+            )
+
+            if table_name != self.current_table:
+                return
+
+            self.current_page_data = page_data
+            self.current_page = page_data.get("page", 1)
+            self.current_page_size = page_data.get("page_size", self.current_page_size)
+
+            if self.table_view:
+                self.table_view.render_page(page_data)
+
+            self._update_pagination_controls(page_data)
+            self._update_status_from_page(page_data)
+
+        except Exception as exc:
+            self.current_page_data = None
+            self._update_pagination_controls(None)
+            self._set_status(C.DATA_STATUS_ERROR.format(table=table_name))
+            print(f"[GUI] Data page load error: {exc}", file=sys.stderr)
+
+            if self.table_view:
+                self.table_view.render_message(f"Could not load {table_name}.")
+
+        finally:
+            if self.table_view:
+                self.table_view.hide_loading_when_ready()
+
+    def go_to_previous_page(self) -> None:
+        """
+        Loads the previous table page.
+        """
+        if not self.current_page_data:
             return
 
-        self._render_table(columns, rows)
+        if not self.current_page_data.get("has_previous"):
+            return
 
-        if domain_filter:
+        self.current_page = max(1, self.current_page - 1)
+        self.reload_current_table(reset_page=False)
+
+    def go_to_next_page(self) -> None:
+        """
+        Loads the next table page.
+        """
+        if not self.current_page_data:
+            return
+
+        if not self.current_page_data.get("has_next"):
+            return
+
+        self.current_page += 1
+        self.reload_current_table(reset_page=False)
+
+    def change_page_size(self, value: str) -> None:
+        """
+        Changes the active page size and reloads the current table.
+
+        Args:
+            value: Selected page size text.
+        """
+        try:
+            self.current_page_size = int(value)
+        except Exception:
+            self.current_page_size = C.DATA_DEFAULT_PAGE_SIZE
+
+        self.current_page = 1
+        self.reload_current_table(reset_page=True)
+
+    def _update_status_from_page(self, page_data: dict) -> None:
+        """
+        Updates the status text after loading a page.
+
+        Args:
+            page_data: Page data returned by DataBrowserService.
+        """
+        table_name = page_data.get("table_name", self.current_table)
+        execution_filter = page_data.get("execution_filter", "")
+        total_rows = page_data.get("total_rows", 0)
+        shown_rows = len(page_data.get("rows", []))
+
+        if not page_data.get("columns"):
+            self._set_status(C.DATA_STATUS_NO_COLUMNS)
+            return
+
+        if execution_filter:
             self._set_status(
                 C.DATA_STATUS_FILTERED.format(
-                    table=self.current_table,
-                    count=len(rows),
-                    domain=domain_filter,
+                    shown=shown_rows,
+                    table=table_name,
+                    filter_value=execution_filter,
+                    total=total_rows,
                 )
             )
-        else:
-            self._set_status(
-                C.DATA_STATUS_LOADED.format(
-                    table=self.current_table,
-                    count=len(rows),
-                )
-            )
-
-    def _render_table(self, columns: list[str], rows: list[dict]) -> None:
-        """
-        Renders a read-only table.
-
-        Args:
-            columns: Table column names.
-            rows: Table row dictionaries.
-        """
-        for child in self.rows_container.winfo_children():
-            child.destroy()
-
-        if not rows:
-            self._render_message(C.DATA_NO_ROWS_TEXT)
             return
 
-        max_columns = min(len(columns), C.DATA_MAX_VISIBLE_COLUMNS)
-        visible_columns = columns[:max_columns]
-
-        header = ctk.CTkFrame(
-            self.rows_container,
-            corner_radius=8,
-        )
-        header.grid(
-            row=0,
-            column=0,
-            sticky="ew",
-            pady=(0, 6),
+        self._set_status(
+            C.DATA_STATUS_LOADED.format(
+                shown=shown_rows,
+                table=table_name,
+                total=total_rows,
+            )
         )
 
-        for column_index, column_name in enumerate(visible_columns):
-            header.grid_columnconfigure(column_index, weight=1)
-
-            label = ctk.CTkLabel(
-                header,
-                text=column_name,
-                font=self.fonts["small_bold"],
-                anchor="w",
-            )
-            label.grid(
-                row=0,
-                column=column_index,
-                sticky="ew",
-                padx=10,
-                pady=10,
-            )
-
-        for row_index, row_data in enumerate(rows, start=1):
-            row_frame = ctk.CTkFrame(
-                self.rows_container,
-                corner_radius=8,
-            )
-            row_frame.grid(
-                row=row_index,
-                column=0,
-                sticky="ew",
-                pady=3,
-            )
-
-            for column_index, column_name in enumerate(visible_columns):
-                row_frame.grid_columnconfigure(column_index, weight=1)
-
-                value = self._format_cell_value(row_data.get(column_name))
-
-                label = ctk.CTkLabel(
-                    row_frame,
-                    text=value,
-                    font=self.fonts["small"],
-                    anchor="w",
-                    justify="left",
-                    wraplength=220,
-                )
-                label.grid(
-                    row=0,
-                    column=column_index,
-                    sticky="ew",
-                    padx=10,
-                    pady=8,
-                )
-
-        if len(columns) > max_columns:
-            warning = ctk.CTkLabel(
-                self.rows_container,
-                text=C.DATA_COLUMNS_TRUNCATED_TEXT.format(
-                    visible=max_columns,
-                    total=len(columns),
-                ),
-                font=self.fonts["small_bold"],
-                justify="left",
-            )
-            warning.grid(
-                row=len(rows) + 1,
-                column=0,
-                sticky="w",
-                pady=(12, 0),
-            )
-
-        if self.current_palette:
-            self.apply_theme(self.current_palette)
-
-    def _render_message(self, message: str) -> None:
+    def _update_pagination_controls(self, page_data: dict | None) -> None:
         """
-        Renders a simple message inside the table area.
+        Updates pagination controls from the loaded page data.
 
         Args:
-            message: Message to display.
+            page_data: Current page data or None.
         """
-        for child in self.rows_container.winfo_children():
-            child.destroy()
+        if not page_data:
+            if self.pagination_label:
+                self.pagination_label.configure(text="Page - / - · 0 rows")
 
-        label = ctk.CTkLabel(
-            self.rows_container,
-            text=message,
-            font=self.fonts["body"],
-            justify="left",
-            wraplength=900,
+            if self.previous_button:
+                self.previous_button.configure(state="disabled")
+
+            if self.next_button:
+                self.next_button.configure(state="disabled")
+
+            return
+
+        page = page_data.get("page", 1)
+        total_pages = page_data.get("total_pages", 1)
+        total_rows = page_data.get("total_rows", 0)
+        shown_rows = len(page_data.get("rows", []))
+        page_size = page_data.get("page_size", self.current_page_size)
+
+        if self.pagination_label:
+            self.pagination_label.configure(
+                text=(
+                    f"Page {page} / {total_pages} · "
+                    f"{shown_rows} shown · {total_rows} total"
+                )
+            )
+
+        if self.previous_button:
+            self.previous_button.configure(
+                state="normal" if page_data.get("has_previous") else "disabled"
+            )
+
+        if self.next_button:
+            self.next_button.configure(
+                state="normal" if page_data.get("has_next") else "disabled"
+            )
+
+        if self.page_size_menu:
+            self.page_size_menu.set(str(page_size))
+
+    def _set_textbox_text(self, textbox, text: str) -> None:
+        """
+        Writes text into a read-only textbox.
+
+        Args:
+            textbox: Target CTkTextbox.
+            text: Text to write.
+        """
+        if not textbox:
+            return
+
+        textbox.configure(state="normal")
+        textbox.delete("1.0", "end")
+        textbox.insert("1.0", text)
+        textbox.configure(state="disabled")
+
+    def _get_description_height(self) -> int:
+        """
+        Calculates a safe description textbox height for the current body font.
+
+        Returns:
+            int: Textbox height in pixels.
+        """
+        try:
+            font_size = abs(int(self.fonts["body"].cget("size")))
+        except Exception:
+            font_size = 14
+
+        return max(54, int(font_size * 4.4))
+
+    def _get_help_text_height(self) -> int:
+        """
+        Calculates a safe height for the execution filter help textbox.
+
+        Returns:
+            int: Textbox height in pixels.
+        """
+        try:
+            font_size = abs(int(self.fonts["small"].cget("size")))
+        except Exception:
+            font_size = 12
+
+        return max(46, int(font_size * 4.2))
+
+    def _configure_readonly_textbox(
+        self,
+        textbox,
+        palette: dict,
+        height: int,
+        text_color: str | None = None,
+    ) -> None:
+        """
+        Applies theme and layout settings to a read-only textbox.
+
+        Args:
+            textbox: Target CTkTextbox.
+            palette: Active theme palette.
+            height: Textbox height.
+            text_color: Optional text color. If omitted, the main text color is used.
+        """
+        if not textbox:
+            return
+
+        textbox.configure(
+            height=height,
+            fg_color=palette["card"],
+            text_color=text_color or palette["text"],
+            border_width=0,
         )
-        label.grid(
-            row=0,
-            column=0,
-            sticky="w",
-        )
+
+        try:
+            textbox._textbox.configure(
+                padx=0,
+                pady=0,
+                borderwidth=0,
+                highlightthickness=0,
+            )
+        except AttributeError:
+            pass
+
+    def _get_filter_help_text(self) -> str:
+        """
+        Gets the execution filter help text.
+
+        Returns:
+            str: Filter help text.
+        """
+        if hasattr(C, "DATA_EXECUTION_FILTER_HELP"):
+            return C.DATA_EXECUTION_FILTER_HELP
+
+        return C.DATA_EXECUTION_FILTER_HELP_TEXT
+
+    def _get_execution_filter(self) -> str:
+        """
+        Gets the current execution identifier filter.
+
+        Returns:
+            str: Execution identifier filter text.
+        """
+        if not self.execution_filter_entry:
+            return ""
+
+        return self.execution_filter_entry.get().strip()
 
     def _sync_table_buttons(self) -> None:
         """
-        Updates internal tab button styles according to the selected table.
+        Updates table selector button styles according to the selected table.
         """
         if not self.current_palette:
             return
@@ -548,26 +795,6 @@ class DataPage(ctk.CTkFrame):
         """
         return table_name.replace("_", " ").title()
 
-    def _format_cell_value(self, value) -> str:
-        """
-        Formats a database cell value for display.
-
-        Args:
-            value: Raw database value.
-
-        Returns:
-            str: Display value.
-        """
-        if value is None:
-            return C.DATA_EMPTY_VALUE
-
-        text = str(value)
-
-        if len(text) > self.MAX_CELL_LENGTH:
-            return text[: self.MAX_CELL_LENGTH] + "..."
-
-        return text
-
     def apply_theme(self, palette: dict) -> None:
         """
         Applies the active theme to the data page.
@@ -590,7 +817,27 @@ class DataPage(ctk.CTkFrame):
             if card:
                 card.configure(fg_color=palette["card"])
 
-        self._configure_description_textbox(palette)
+        self._configure_readonly_textbox(
+            textbox=self.description_textbox,
+            palette=palette,
+            height=self._get_description_height(),
+            text_color=palette["text"],
+        )
+
+        self._configure_readonly_textbox(
+            textbox=self.filter_help_textbox,
+            palette=palette,
+            height=self._get_help_text_height(),
+            text_color=palette["muted"],
+        )
+
+        if self.execution_filter_entry:
+            self.execution_filter_entry.configure(
+                fg_color=palette["soft"],
+                border_color=palette["soft"],
+                text_color=palette["text"],
+                placeholder_text_color=palette["muted"],
+            )
 
         if self.refresh_button:
             self.refresh_button.configure(
@@ -599,27 +846,35 @@ class DataPage(ctk.CTkFrame):
                 text_color=palette["inverse_text"],
             )
 
-        if self.domain_entry:
-            self.domain_entry.configure(
-                fg_color=palette["soft"],
-                border_color=palette["soft"],
-                text_color=palette["text"],
-                placeholder_text_color=palette["muted"],
-            )
-
         if self.status_label:
             self.status_label.configure(text_color=palette["muted"])
 
+        for button in [
+            self.previous_button,
+            self.next_button,
+        ]:
+            if button:
+                button.configure(
+                    fg_color=palette["secondary"],
+                    hover_color=palette["secondary_hover"],
+                    text_color=palette["text"],
+                )
+
+        if self.page_size_menu:
+            self.page_size_menu.configure(
+                fg_color=palette["secondary"],
+                button_color=palette["secondary"],
+                button_hover_color=palette["secondary_hover"],
+                text_color=palette["text"],
+                dropdown_fg_color=palette["card"],
+                dropdown_hover_color=palette["soft"],
+                dropdown_text_color=palette["text"],
+            )
+
+        if self.pagination_label:
+            self.pagination_label.configure(text_color=palette["muted"])
+
+        if self.table_view:
+            self.table_view.apply_theme(palette)
+
         self._sync_table_buttons()
-
-        if self.rows_container:
-            for child in self.rows_container.winfo_children():
-                if isinstance(child, ctk.CTkFrame):
-                    child.configure(fg_color=palette["soft"])
-
-                    for nested in child.winfo_children():
-                        if isinstance(nested, ctk.CTkLabel):
-                            nested.configure(text_color=palette["text"])
-
-                elif isinstance(child, ctk.CTkLabel):
-                    child.configure(text_color=palette["text"])

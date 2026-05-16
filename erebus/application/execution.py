@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
-import uuid
 
 import shared.constants as C
+from shared.utils import build_execution_id
 
 
 class Execution:
@@ -13,13 +13,16 @@ class Execution:
     def __init__(self, target: str):
         """
         Initializes a new execution.
+
+        Args:
+            target: Target domain analyzed by EREBUS.
         """
-        self.ID = str(uuid.uuid4())
         self.TARGET = target
 
         self.START = datetime.now(timezone.utc)
-        self.END = None
+        self.ID = build_execution_id(target, self.START)
 
+        self.END = None
         self.STATUS = C.EXECUTION_STATUS_RUNNING
 
     def finish(self):
@@ -43,4 +46,5 @@ class Execution:
         """
         if not self.END:
             return None
+
         return (self.END - self.START).total_seconds()
