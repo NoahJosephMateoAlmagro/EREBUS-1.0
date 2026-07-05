@@ -43,3 +43,22 @@ RESULTS_METRIC_LABELS = {
     "whois_record_found": "WHOIS record found",
 
 }
+
+RESULTS_EXPORT_WORD_BUTTON = "Download report"
+
+RESULTS_STATUS_EXPORTING_WORD = "Exporting execution report to Word..."
+RESULTS_STATUS_EXPORT_WORD_CANCELLED = "Word export cancelled."
+RESULTS_STATUS_EXPORT_WORD_SUCCESS = "Word report exported successfully."
+RESULTS_STATUS_EXPORT_WORD_ERROR = "Could not export Word report."
+
+RESULTS_EXPORT_WORD_SUCCESS_TITLE = "Word report exported"
+RESULTS_EXPORT_WORD_SUCCESS_MESSAGE = (
+    "The execution report was exported successfully.\n\n"
+    "File:\n{path}"
+)
+
+RESULTS_EXPORT_WORD_ERROR_TITLE = "Word export error"
+RESULTS_EXPORT_WORD_ERROR_MESSAGE = (
+    "The execution report could not be exported to Word.\n\n"
+    "{error}"
+)

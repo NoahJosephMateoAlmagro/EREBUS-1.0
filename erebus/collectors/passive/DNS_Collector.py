@@ -38,7 +38,7 @@ class DNSCollector(Collector):
 
        """
 
-        Logger.info(f"Starting DNS resolution for {target}", context=self.__class__.__name__)
+        Logger.debug(f"Starting DNS resolution for {target}", context=self.__class__.__name__)
 
         results = []
         attempted = 0

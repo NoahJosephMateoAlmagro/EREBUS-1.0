@@ -31,7 +31,7 @@ class DNS_CNAME_Collector(Collector):
             list[dict]: List of CNAME records
         """
 
-        Logger.info(f"Starting CNAME DNS resolution for {domain}", context=self.__class__.__name__)
+        Logger.debug(f"Starting CNAME DNS resolution for {domain}", context=self.__class__.__name__)
 
         results = []
         domain = domain.rstrip(".").lower()

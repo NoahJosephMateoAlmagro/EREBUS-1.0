@@ -177,7 +177,7 @@ SETTING_LABELS = {
 
 SETTING_TOOLTIPS = {
     "timezone": "Timezone used by the logger to display execution timestamps.",
-    "mode": "Controls the logging verbosity: TRACE, INFO, ERROR or SILENT.",
+    "mode": "Controls the logging verbosity: DEBUG, INFO, ERROR or SILENT.",
     "clear_db_on_run": "If enabled, the database is cleared before starting a new execution.",
 
     "nmap_path": "Absolute path to the Nmap executable used by the active scanning module.",

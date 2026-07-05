@@ -88,6 +88,7 @@ def run_erebus(
         mode=cfg["logging"]["mode"],
     )
 
+
     Logger.info("Starting EREBUS", context="Runner")
 
     db = Database()
@@ -157,6 +158,7 @@ def run_erebus(
             )
 
     Logger.info("END EREBUS", context="Runner")
+
 
     return {
         "execution": execution,

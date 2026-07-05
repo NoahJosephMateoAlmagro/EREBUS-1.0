@@ -21,21 +21,21 @@
         "wayback_min_year": 2000
       },
       "logging": {
-        "mode": "TRACE",
+        "mode": "DEBUG",
         "timezone": "Europe/Madrid"
       },
       "modules": {
-        "crawling": false,
-        "dns": false,
-        "email_passive": false,
-        "file_parsing": false,
-        "http_headers": false,
-        "js_parsing": false,
-        "nmap": false,
-        "scraping": false,
-        "shodan": false,
+        "crawling": true,
+        "dns": true,
+        "email_passive": true,
+        "file_parsing": true,
+        "http_headers": true,
+        "js_parsing": true,
+        "nmap": true,
+        "scraping": true,
+        "shodan": true,
         "subdomains": true,
-        "wayback": false,
+        "wayback": true,
         "whois": true
       },
       "retries": {
@@ -61,6 +61,6 @@
         "nmap_path": "C:\\\\Program Files (x86)\\\\Nmap\\\\nmap.exe"
       }
     },
-    "target": "google.com"
+    "target": "urjc.es"
   }
 }

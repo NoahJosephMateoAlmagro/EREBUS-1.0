@@ -17,19 +17,6 @@ class ApiKeySettingsService:
     Service used to manage API credentials from the graphical interface.
     """
 
-    API_CREDENTIALS_SCHEMA = """
-        CREATE TABLE IF NOT EXISTS api_credentials (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            provider TEXT NOT NULL,
-            api_key TEXT NOT NULL,
-            extra TEXT,
-            description TEXT,
-            enabled INTEGER DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(provider, api_key)
-        );
-    """
-
     def __init__(self, database_path: Path | None = None):
         """
         Initializes the API key settings service.
@@ -38,7 +25,6 @@ class ApiKeySettingsService:
             database_path: Optional custom SQLite database path.
         """
         self.database_path = database_path or self._get_default_database_path()
-        self._ensure_database_ready()
 
     def _get_default_database_path(self) -> Path:
         """
@@ -49,16 +35,6 @@ class ApiKeySettingsService:
         """
         app_root = Path(__file__).resolve().parents[2]
         return app_root / "persistence" / "erebus.db"
-
-    def _ensure_database_ready(self) -> None:
-        """
-        Ensures the database file and API credentials table exist.
-        """
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with self._connect() as conn:
-            conn.executescript(self.API_CREDENTIALS_SCHEMA)
-            conn.commit()
 
     def get_api_key(self, provider: str) -> str:
         """
@@ -77,7 +53,7 @@ class ApiKeySettingsService:
 
         query = """
             SELECT api_key
-            FROM api_credentials
+            FROM API_CREDENTIALS
             WHERE provider = ?
             ORDER BY created_at DESC, id DESC
             LIMIT 1;

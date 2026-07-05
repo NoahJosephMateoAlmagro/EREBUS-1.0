@@ -1,36 +1,33 @@
 import json
 
+from .base_repository import BaseRepository
 
-class ApiRepository:
+
+class ApiRepository(BaseRepository):
     """
     Repository responsible for retrieving external API credentials.
-
     """
-
-    def __init__(self, conn):
-        """
-        Initializes the repository with a database connection.
-
-        Args:
-            conn: SQLite database connection
-        """
-        self.conn = conn
 
     def get_provider_credentials(self, provider):
         """
         Retrieves active credentials for a given provider.
-        """
-        cursor = self.conn.cursor()
 
-        cursor.execute("""
+        Args:
+            provider (str): External API provider name.
+
+        Returns:
+            dict | None: Active provider credentials, or None if no enabled credentials exist.
+        """
+        row = self._fetchone(
+            """
             SELECT api_key, extra
             FROM api_credentials
             WHERE provider = ?
             AND enabled = 1
             LIMIT 1
-        """, (provider,))
-
-        row = cursor.fetchone()
+            """,
+            (provider,),
+        )
 
         if not row:
             return None

@@ -4,15 +4,20 @@ Results page for the EREBUS graphical interface.
 This page presents a clean summary of the latest execution, including the final
 status, active modules and the most important findings. It intentionally avoids
 showing raw errors or console-level debug information.
+
+The page also allows exporting the visible execution summary to a Word report.
 """
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime
+from tkinter import messagebox
 
 import customtkinter as ctk
 
 import presentation.constants as C
+from presentation.services.results_export_service import ResultsExportService
 from presentation.widgets.cards import create_card
 
 
@@ -36,6 +41,8 @@ class ResultsPage(ctk.CTkFrame):
         super().__init__(parent, corner_radius=0)
 
         self.fonts = fonts
+        self.results_export_service = ResultsExportService()
+        self.current_summary = None
 
         self.results_scroll = None
         self.header_card = None
@@ -45,6 +52,7 @@ class ResultsPage(ctk.CTkFrame):
         self.highlights_container = None
         self.empty_label = None
 
+        self.export_word_button = None
         self.status_badge_info = None
         self.info_blocks = []
         self.highlight_tiles = []
@@ -75,6 +83,7 @@ class ResultsPage(ctk.CTkFrame):
         """
         Clears all cached widgets that receive explicit theme updates.
         """
+        self.export_word_button = None
         self.status_badge_info = None
         self.info_blocks = []
         self.highlight_tiles = []
@@ -85,6 +94,7 @@ class ResultsPage(ctk.CTkFrame):
         """
         Builds the initial empty state shown before any execution summary exists.
         """
+        self.current_summary = None
         self._reset_theme_targets()
 
         card = create_card(self.results_scroll, row=0)
@@ -113,6 +123,8 @@ class ResultsPage(ctk.CTkFrame):
         Args:
             summary: Structured summary dictionary built for the UI.
         """
+        self.current_summary = summary
+
         for child in self.results_scroll.winfo_children():
             child.destroy()
 
@@ -134,7 +146,8 @@ class ResultsPage(ctk.CTkFrame):
         """
         self.header_card = create_card(self.results_scroll, row=0)
         self.header_card.grid_columnconfigure(0, weight=1)
-        self.header_card.grid_columnconfigure(1, weight=1)
+        self.header_card.grid_columnconfigure(1, weight=0)
+        self.header_card.grid_columnconfigure(2, weight=0)
 
         title = ctk.CTkLabel(
             self.header_card,
@@ -155,16 +168,33 @@ class ResultsPage(ctk.CTkFrame):
             row=0,
             column=1,
             sticky="e",
-            padx=24,
+            padx=(8, 10),
             pady=(22, 8),
         )
         self.status_badge_info = badge_info
+
+        self.export_word_button = ctk.CTkButton(
+            self.header_card,
+            text=C.RESULTS_EXPORT_WORD_BUTTON,
+            width=160,
+            height=36,
+            corner_radius=6,
+            font=self.fonts["button"],
+            command=self.export_execution_summary_to_word,
+        )
+        self.export_word_button.grid(
+            row=0,
+            column=2,
+            sticky="e",
+            padx=(0, 24),
+            pady=(22, 8),
+        )
 
         info_frame = ctk.CTkFrame(self.header_card, fg_color="transparent")
         info_frame.grid(
             row=1,
             column=0,
-            columnspan=2,
+            columnspan=3,
             sticky="ew",
             padx=24,
             pady=(0, 14),
@@ -415,6 +445,39 @@ class ResultsPage(ctk.CTkFrame):
             pady=(0, 14),
         )
 
+    def export_execution_summary_to_word(self) -> None:
+        """
+        Exports the current execution summary to a Word report.
+        """
+        if not self.current_summary:
+            return
+
+        try:
+            metadata = self.results_export_service.export_summary_to_word(
+                summary=self.current_summary,
+                parent=self.winfo_toplevel(),
+            )
+
+            if metadata is None:
+                return
+
+            messagebox.showinfo(
+                C.RESULTS_EXPORT_WORD_SUCCESS_TITLE,
+                C.RESULTS_EXPORT_WORD_SUCCESS_MESSAGE.format(
+                    path=metadata.get("output_path", C.RESULTS_VALUE_EMPTY),
+                ),
+                parent=self.winfo_toplevel(),
+            )
+
+        except Exception as exc:
+            print(f"[GUI] Results Word export error: {exc}", file=sys.stderr)
+
+            messagebox.showerror(
+                C.RESULTS_EXPORT_WORD_ERROR_TITLE,
+                C.RESULTS_EXPORT_WORD_ERROR_MESSAGE.format(error=str(exc)),
+                parent=self.winfo_toplevel(),
+            )
+
     def _create_status_badge(self, parent, status_value: str) -> dict:
         """
         Creates a fixed-size status badge.
@@ -542,7 +605,7 @@ class ResultsPage(ctk.CTkFrame):
             str: Formatted datetime string.
         """
         if isinstance(value, datetime):
-            return value.strftime(f"%Y-%m-%d %H:%M:%S {C.RESULTS_UTC_SUFFIX}")
+            return value.strftime("%Y-%m-%d %H:%M:%S")
 
         return C.RESULTS_VALUE_EMPTY
 
@@ -594,6 +657,13 @@ class ResultsPage(ctk.CTkFrame):
 
         for row_card in self.module_rows:
             row_card.configure(fg_color=palette["soft"])
+
+        if self.export_word_button:
+            self.export_word_button.configure(
+                fg_color=palette["secondary"],
+                hover_color=palette["secondary_hover"],
+                text_color=palette["text"],
+            )
 
         if self.status_badge_info:
             widget = self.status_badge_info["widget"]

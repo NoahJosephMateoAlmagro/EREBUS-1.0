@@ -105,4 +105,4 @@ EXECUTION_FAILED_POPUP = (
     "Execution failed for domain: {target}. Check the runtime console for details."
 )
 
-OPTION_LOGGING_MODES = ["TRACE", "INFO", "ERROR", "SILENT"]
+OPTION_LOGGING_MODES = ["DEBUG", "INFO", "ERROR", "SILENT"]

@@ -165,6 +165,7 @@ class Orchestrator:
                 module_key: Key used in cfg["modules"].
                 service_key: Key used in the service builder output.
             """
+
             if cancellation_requested():
                 Logger.info(
                     f"Skipping module because cancellation was requested: {module_key}",

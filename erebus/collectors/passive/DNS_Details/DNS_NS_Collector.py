@@ -32,7 +32,7 @@ class DNS_NS_Collector(Collector):
              list[dict]: List of NS records
         """
 
-        Logger.info(f"Starting NS DNS resolution for {domain}", context=self.__class__.__name__)
+        Logger.debug(f"Starting NS DNS resolution for {domain}", context=self.__class__.__name__)
 
         results = []
         domain = domain.rstrip(".").lower()
@@ -65,5 +65,5 @@ class DNS_NS_Collector(Collector):
             Logger.error(f"NS resolution error: {e}", context=self.__class__.__name__)
             raise CollectorError(f"NS resolution error for {domain}: {e}") from e
 
-        Logger.info(f"Resolved {len(results)} NS records", context=self.__class__.__name__)
+        Logger.debug(f"Resolved {len(results)} NS records", context=self.__class__.__name__)
         return results

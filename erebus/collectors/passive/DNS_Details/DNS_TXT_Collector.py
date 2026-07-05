@@ -32,7 +32,7 @@ class DNS_TXT_Collector(Collector):
             list[dict]: List of TXT records
         """
 
-        Logger.info(f"Starting TXT DNS resolution for {domain}", context=self.__class__.__name__)
+        Logger.debug(f"Starting TXT DNS resolution for {domain}", context=self.__class__.__name__)
 
         results = []
         domain = domain.rstrip(".").lower()

@@ -31,7 +31,7 @@ class DNS_MX_Collector(Collector):
             list[dict]: List of MX records
         """
 
-        Logger.info(f"Starting MX DNS resolution for {domain}", context=self.__class__.__name__)
+        Logger.debug(f"Starting MX DNS resolution for {domain}", context=self.__class__.__name__)
 
         results = []
         domain = domain.rstrip(".").lower()

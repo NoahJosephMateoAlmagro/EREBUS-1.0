@@ -6,10 +6,11 @@ import shared.constants as C
 
 
 class Logger:
-    """
-    Simple centralized logger for EREBUS.
-    Supports TRACE, INFO, ERROR and SILENT modes.
-    """
+    class Logger:
+        """
+        Simple centralized logger for EREBUS.
+        Supports DEBUG, INFO, ERROR and SILENT modes.
+        """
 
     TIMEZONE = "UTC"
     MODE = C.LOG_MODE_INFO
@@ -21,7 +22,7 @@ class Logger:
 
         Args:
             timezone (str): IANA timezone name (e.g. 'Europe/Madrid', 'UTC')
-            mode (str): Logging mode ('TRACE', 'INFO', 'ERROR', 'SILENT')
+            mode (str): Logging mode ('DEBUG', 'INFO', 'ERROR', 'SILENT')
         """
         cls.TIMEZONE = timezone
 
@@ -37,8 +38,7 @@ class Logger:
         Determines whether a message should be printed based on the current mode.
 
         Args:
-            level (str): Log level ('TRACE', 'INFO', 'ERROR')
-
+            level (str): Log level ('DEBUG', 'INFO', 'ERROR')
         Returns:
             bool: True if the message should be printed, False otherwise
         """
@@ -86,18 +86,11 @@ class Logger:
             print(f"[{timestamp}] [{level}] {message}")
 
     @classmethod
-    def trace(cls, message: str, context: Optional[str] = None) -> None:
-        """
-        Trace log (only printed in TRACE mode).
-        """
-        cls._log(C.LOG_MODE_TRACE, message, context)
-
-    @classmethod
     def debug(cls, message: str, context: Optional[str] = None) -> None:
         """
-        Backward-compatible alias for trace logs.
+        Debug log.
         """
-        cls.trace(message, context)
+        cls._log(C.LOG_MODE_DEBUG, message, context)
 
     @classmethod
     def info(cls, message: str, context: Optional[str] = None) -> None:

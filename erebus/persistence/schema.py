@@ -3,7 +3,7 @@ SCHEMA_SQL = """
         -- Executions
         -- ------------------------*/
 
-        CREATE TABLE IF NOT EXISTS executions (
+        CREATE TABLE IF NOT EXISTS EXECUTIONS (
             id TEXT PRIMARY KEY,
             target TEXT NOT NULL,
             start_time TEXT NOT NULL,
@@ -15,7 +15,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- Discovered domains
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS domain_results (
+        CREATE TABLE IF NOT EXISTS DOMAIN_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             domain TEXT NOT NULL,
@@ -32,7 +32,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- Resolved domains (DNS)
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS resolved_domain_results (
+        CREATE TABLE IF NOT EXISTS RESOLVED_DOMAIN_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             domain TEXT NOT NULL,
@@ -42,7 +42,7 @@ SCHEMA_SQL = """
             FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
         );
 
-        CREATE TABLE IF NOT EXISTS dns_observations (
+        CREATE TABLE IF NOT EXISTS DNS_OBSERVATIONS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
 
             -- Execution context
@@ -69,7 +69,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- HTTP headers
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS http_headers (
+        CREATE TABLE IF NOT EXISTS HTTP_HEADERS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             domain TEXT NOT NULL,
@@ -87,7 +87,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- WHOIS
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS whois_results (
+        CREATE TABLE IF NOT EXISTS WHOIS_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             domain TEXT NOT NULL,
@@ -106,7 +106,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- Emails (unified)
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS email_results (
+        CREATE TABLE IF NOT EXISTS EMAIL_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -121,7 +121,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- Crawler results (debug / traceability)
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS crawler_results (
+        CREATE TABLE IF NOT EXISTS CRAWLER_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             url TEXT,
@@ -134,7 +134,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- JS results (debug / traceability)
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS js_results (
+        CREATE TABLE IF NOT EXISTS JS_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             script_url TEXT,
@@ -146,7 +146,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- Exposed credentials
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS credential_results (
+        CREATE TABLE IF NOT EXISTS CREDENTIAL_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             type TEXT,
@@ -161,7 +161,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- Nmap results
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS nmap_results (
+        CREATE TABLE IF NOT EXISTS NMAP_RESULTS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             execution_id TEXT NOT NULL,
             ip TEXT NOT NULL,
@@ -178,7 +178,7 @@ SCHEMA_SQL = """
         /* ------------------------
         -- API credentials
         -- ------------------------*/
-        CREATE TABLE IF NOT EXISTS api_credentials (
+        CREATE TABLE IF NOT EXISTS API_CREDENTIALS (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             provider TEXT NOT NULL,
             api_key TEXT NOT NULL,
@@ -193,30 +193,30 @@ SCHEMA_SQL = """
         -- Indexes
         -- ------------------------*/
 
-        CREATE INDEX IF NOT EXISTS idx_email_execution
+        CREATE INDEX IF NOT EXISTS IDX_EMAIL_EXECUTION
         ON email_results (execution_id);
 
-        CREATE INDEX IF NOT EXISTS idx_email_value
+        CREATE INDEX IF NOT EXISTS IDX_EMAIL_VALUE
         ON email_results (email);
 
-        CREATE INDEX IF NOT EXISTS idx_domain_execution
+        CREATE INDEX IF NOT EXISTS IDX_DOMAIN_EXECUTION
         ON domain_results (execution_id);
 
-        CREATE INDEX IF NOT EXISTS idx_domain_value
+        CREATE INDEX IF NOT EXISTS IDX_DOMAIN_VALUE
         ON domain_results (domain);
 
-        CREATE INDEX IF NOT EXISTS idx_dns_execution
+        CREATE INDEX IF NOT EXISTS IDX_DNS_EXECUTION
         ON dns_observations (execution_id);
 
-        CREATE INDEX IF NOT EXISTS idx_dns_domain
+        CREATE INDEX IF NOT EXISTS IDX_DNS_DOMAIN
         ON dns_observations (domain);
 
-        CREATE INDEX IF NOT EXISTS idx_nmap_execution
+        CREATE INDEX IF NOT EXISTS IDX_NMAP_EXECUTION
         ON nmap_results (execution_id);
 
-        CREATE INDEX IF NOT EXISTS idx_headers_execution
+        CREATE INDEX IF NOT EXISTS IDX_HEADERS_EXECUTION
         ON http_headers (execution_id);
 
-        CREATE INDEX IF NOT EXISTS idx_credentials_execution
+        CREATE INDEX IF NOT EXISTS IDX_CREDENTIALS_EXECUTION
         ON credential_results (execution_id);
 """

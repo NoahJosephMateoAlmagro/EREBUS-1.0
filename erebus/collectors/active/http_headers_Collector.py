@@ -71,5 +71,5 @@ class HTTPHeadersCollector(Collector):
             Logger.error(f"HTTP headers collection error: {e}", context=self.__class__.__name__)
             raise CollectorError(f"HTTP headers collection error for {url}: {e}") from e
 
-        Logger.info(f"Collected {len(headers_result)} headers", context=self.__class__.__name__)
+        Logger.debug(f"Collected {len(headers_result)} headers", context=self.__class__.__name__)
         return headers_result

@@ -47,7 +47,7 @@ class DataBrowserService:
     ]
 
     HIDDEN_TABLES = {
-        "api_credentials",
+        "API_CREDENTIALS",
         "sqlite_sequence",
     }
 
