@@ -40,7 +40,7 @@ class Scraper:
            dict: Scraped data including HTML and JSON responses
         """
 
-        Logger.info(f"Starting scraping for {url}", context=self.__class__.__name__)
+        Logger.debug(f"Starting scraping for {url}", context=self.__class__.__name__)
 
 
         result = {
@@ -123,7 +123,7 @@ class Scraper:
             Logger.error(f"Scraper internal error: {e}", context=self.__class__.__name__)
             raise CollectorError(f"Scraper internal error for {url}: {e}") from e
 
-        Logger.info(
+        Logger.debug(
             f"Scraping completed (HTML: {'yes' if result['html'] else 'no'}, JSON: {len(result['json_objects'])})",
             context=self.__class__.__name__
         )
