@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-
+import os
 
 class ApiKeySettingsService:
     """
@@ -28,14 +28,32 @@ class ApiKeySettingsService:
 
     def _get_default_database_path(self) -> Path:
         """
-        Gets the default EREBUS SQLite database path.
+        Gets the persistent EREBUS SQLite database path.
 
         Returns:
-            Path: Default database path.
+            Path: Persistent database path.
         """
-        app_root = Path(__file__).resolve().parents[2]
-        return app_root / "persistence" / "erebus.db"
+        local_app_data = os.getenv("LOCALAPPDATA")
 
+        if local_app_data:
+            database_directory = (
+                    Path(local_app_data)
+                    / "EREBUS"
+                    / "persistence"
+            )
+        else:
+            database_directory = (
+                    Path.home()
+                    / ".erebus"
+                    / "persistence"
+            )
+
+        database_directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return database_directory / "erebus.db"
     def get_api_key(self, provider: str) -> str:
         """
         Gets the stored API key for a provider.

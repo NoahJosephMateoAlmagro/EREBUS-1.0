@@ -22,6 +22,7 @@ from presentation.services.user_preference_service import UserPreferencesService
 from presentation.theme import build_fonts
 from presentation.widgets.loading_overlay import LoadingOverlay
 from presentation.widgets.notification_popup import NotificationPopup
+from persistence.database import Database
 
 
 class ErebusApp(ctk.CTk):
@@ -38,6 +39,7 @@ class ErebusApp(ctk.CTk):
         """
         super().__init__()
 
+        self.database = Database()
         self.withdraw()
 
         load_app_fonts()
@@ -261,6 +263,11 @@ class ErebusApp(ctk.CTk):
 
         try:
             self.console_controller.restore_streams()
+        except Exception:
+            pass
+
+        try:
+            self.database.close()
         except Exception:
             pass
 

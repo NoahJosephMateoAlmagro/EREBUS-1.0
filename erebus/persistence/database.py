@@ -1,5 +1,6 @@
 from pathlib import Path
 import sqlite3
+import os
 
 from persistence.schema import SCHEMA_SQL
 from shared.logger import Logger
@@ -16,9 +17,17 @@ class Database:
         """
         Initializes database connection and ensures schema is created.
         """
-        app_root = Path(__file__).resolve().parents[1]
-        db_dir = app_root / "persistence"
-        db_dir.mkdir(exist_ok=True)
+        local_app_data = os.getenv("LOCALAPPDATA")
+
+        if local_app_data:
+            db_dir = Path(local_app_data) / "EREBUS" / "persistence"
+        else:
+            db_dir = Path.home() / ".erebus" / "persistence"
+
+        db_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         self.db_path = db_dir / "erebus.db"
 
