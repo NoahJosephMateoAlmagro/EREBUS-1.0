@@ -6,6 +6,7 @@ preferences related to the execution screen. It is intentionally isolated from
 the execution engine and from the main results database.
 
 The service stores only stable UI preferences, such as:
+
 - last target domain
 - execution form values
 - enabled modules
@@ -18,6 +19,7 @@ currently running modules.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -36,10 +38,15 @@ class UserPreferencesService:
 
         Args:
             base_dir: Optional base directory where the JSON file will be stored.
-                If omitted, the file is stored inside the presentation package.
+                If omitted, the file is stored in the user's local application data.
         """
         if base_dir is None:
-            base_dir = Path(__file__).resolve().parent.parent
+            local_app_data = os.getenv("LOCALAPPDATA")
+
+            if local_app_data:
+                base_dir = Path(local_app_data) / "EREBUS"
+            else:
+                base_dir = Path.home() / ".erebus"
 
         self.base_dir = Path(base_dir)
         self.data_dir = self.base_dir / "user_data"
