@@ -1,0 +1,7 @@
+EREBUS – Aviso de uso responsable
+
+EREBUS es una herramienta desarrollada con fines académicos, educativos y de análisis de exposición en Internet.
+
+El usuario debe utilizarla únicamente sobre sistemas propios o sobre objetivos para los que disponga de autorización expresa. El autor no se responsabiliza del uso indebido de la herramienta ni de las consecuencias derivadas de su utilización.
+
+Nmap, Npcap y las demás dependencias incluidas o utilizadas por EREBUS son proyectos de terceros y se encuentran sujetos a sus propias licencias y condiciones de distribución.
